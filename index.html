@@ -204,6 +204,97 @@
 <!--               GAME.JS                      -->
 <!-- ========================================== -->
 <script>
+
+/* ================= SKIN MANAGER ================= */
+// REPLACE THIS JSON WITH YOUR GALAXY.json CONTENT
+// This is a placeholder that generates a simple purple circle sprite
+const DEFAULT_SKIN_JSON = {
+  "custom_skin_galaxy": {
+    "regionDict": {
+      "galaxy_base": { "texture": "galaxy_tex", "x": 0, "y": 0, "w": 64, "h": 64 }
+    },
+    "textureDict": {
+      // Placeholder Base64 - A purple gradient circle
+      "galaxy_tex": { 
+          "file": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyJpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+/PmQCNrwAAAMaSURBVHja7ZtNsxtFGMfXU09+JbaSvBicqgSDC2cO+Qic+QicOOSMc+HCoUouc+HAAQ4cOFSQKi4c4MAJ4sSvkPjR6/F/2j1pl2Z2Vzszu6v2/M+8O+u1Z0Y/fe/TS7urX375ZQv81+rD9y/2wAdgD/wB9sAHYA/8AfbAB2AP/AH2wAdgD/wB9sAHYA/8AfbAB+D/9sD640+27U9/2rbf/2zb/vynbWfP33zP717/+dft9Mcfb+5n9+F72/bnn27e/8O3X2+Xv3138/7Vz9/f/P/211/c/P/D77/d/M/nH3948z+ff/px2y4u8n238x/3b+7/9s2r3P/F9v7Fxdt79z587+a+b9+8vPne1c/fv3n/5+9f3vz/5+/fs/0/f/fNzb+fvv1m+/TNN27u/fb1q3z/+69e3vz/x69f3vz/x69fs/3ff/ns5v9fPnv65n5//+zJzf+fP/1s8/8XTz7d/P/Fk9z/g4f339679/67N/d9/OD+zfeuHz7I9//84P7N/3/+YP/m/z9/8CDb//P7+zf//vz+/Zv7/fzunZv/P797J9v/8907N///+c6dm/v9dOftt/fuvfXOzb1/vP32zf9/vP12tv/H27dv/v/j7be5/9s3//94e//m3z/e3r+53093b9/8//Pd29n+n+/evvn/z3dvs/0/33375t9P77x1/+1v7r97c+9f99+/+d71/fdz/w/fv3/z/w/fz/b/cP/+zf9/uJ/7f3D/5n4/vffO22/vvfvuzb1/vPfuW9/zuv7n37bTH3/M9v9479383u/e3Pun9999+63333335t6/3n8v3//rvfez/b/efy/f/+u9e/n+X++9m/v99O1Xj7bt8vKfr/h52y4vL/J9t/M3f/338vLif29/8/e3y8uL/739zd/fLi8v8v238zf3u7y8zP1//t62y8vL2f7Ly4t8/6/Ly4v83u/y8nJzv5/uv/fub7998D64e+CD8we27Q9gD3wA9sAfYA98APbAH2APfAD2wB9gD3wA9sAfYA98APbAH2APfAD2wB/gXzwEGAAGa704f7k/fQAAAABJRU5ErkJggg==" 
+      }
+    },
+    "skin": {
+      "base": ["galaxy_base"],
+      "glow": ["galaxy_base"] // Use the same base as glow if no specific glow tex
+    }
+  }
+};
+
+class SkinManager {
+    constructor() {
+        this.skins = {};
+        this.currentSkin = null;
+        this.loadedImages = {};
+        // Load the default skin (or user's pasted skin)
+        this.loadSkinData(DEFAULT_SKIN_JSON);
+    }
+
+    loadSkinData(json) {
+        for (const [skinName, data] of Object.entries(json)) {
+            const regionDict = data.regionDict;
+            const textureDict = data.textureDict;
+            
+            // Decode and load images
+            for (const [texKey, texData] of Object.entries(textureDict)) {
+                if (!this.loadedImages[texKey]) {
+                    const img = new Image();
+                    img.src = texData.file; 
+                    this.loadedImages[texKey] = img;
+                }
+            }
+            
+            this.skins[skinName] = {
+                regionDict: regionDict,
+                base: data.skin.base || [],
+                glow: data.skin.glow || []
+            };
+            
+            // Auto-select first loaded skin
+            if (!this.currentSkin) this.currentSkin = this.skins[skinName];
+        }
+    }
+
+    drawSegment(ctx, x, y, radius, index, isGlowLayer) {
+        if (!this.currentSkin) return false;
+
+        const regions = isGlowLayer ? this.currentSkin.glow : this.currentSkin.base;
+        if (!regions || regions.length === 0) return false;
+
+        const regionName = regions[index % regions.length];
+        const region = this.currentSkin.regionDict[regionName];
+
+        if (!region) return false;
+        
+        const img = this.loadedImages[region.texture];
+        if (!img || !img.complete) return false;
+
+        ctx.save();
+        ctx.translate(x, y);
+        // Scale image to fit the radius
+        const scale = (radius * 2.5) / region.w; 
+        ctx.scale(scale, scale);
+        
+        if (isGlowLayer) {
+            ctx.globalAlpha = 0.4;
+            // Draw slightly larger for "fake glow"
+            ctx.scale(1.2, 1.2);
+        }
+
+        ctx.drawImage(img, region.x, region.y, region.w, region.h, -region.w/2, -region.h/2, region.w, region.h);
+        ctx.restore();
+        
+        return true;
+    }
+}
+
+const skinManager = new SkinManager();
+
 /* ================= SERVER CONNECTION ================= */
 // REPLACE WITH YOUR RENDER URL
 const SERVER_URL = "wss://snake-server-3bnw.onrender.com"; 
@@ -217,7 +308,6 @@ function onPlayClick() {
     const input = document.getElementById('nickname-input');
     playerName = input.value.trim() || "Player";
     
-    // Show Loading
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('loading-overlay').style.display = 'flex';
     document.getElementById('loading-text').innerText = "Connecting...";
@@ -245,15 +335,12 @@ function connectToServer() {
               
               if (data.type === 'init') {
                   myId = data.selfId;
-                  // Start Game ONLY after server handshake
                   document.getElementById('loading-overlay').style.display = 'none';
                   document.getElementById('ui-layer').style.display = 'block';
                   initGame();
               } 
               else if (data.type === 'state') {
                   const newRemotePlayers = {};
-                  // OPTIMIZATION: Don't recreate objects if they exist to save GC
-                  // But for simplicity of sync, we swap. The server payload is the bottleneck here.
                   data.players.forEach(p => {
                       if (p.id !== myId) {
                           newRemotePlayers[p.id] = p;
@@ -317,7 +404,6 @@ function handleDisconnection() {
 
 /* ================= GLOBAL SETUP ================= */
 const canvas = document.getElementById("game");
-// OPTIMIZATION: alpha: false might be faster on some browsers, but we need transparency for UI overlay sometimes. 
 const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true }); 
 const minimapCanvas = document.getElementById("minimap");
 const miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
@@ -333,8 +419,6 @@ window.addEventListener("resize", resize);
 
 /* ================= CONFIGURATION ================= */
 const SEGMENT_SPACING = 5;
-const SEGMENT_RADIUS = 7;
-const PATH_SPACING = 1; 
 const MAP_RADIUS = 6000; 
 
 const BASE_SPEED = 2.0; 
@@ -375,7 +459,6 @@ let frameCount = 0;
 let lastFpsUpdate = 0;
 let lastBotsVsBotsTime = 0;
 
-// OPTIMIZATION: Reduced Bot count significantly for performance
 const BOT_COUNT = 25; 
 let bots = Array.from({ length: BOT_COUNT }, (_, i) => ({
   name: `Bot_${String(i + 1).padStart(3, '0')}`,
@@ -453,7 +536,6 @@ function initGame() {
 
   expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
   
-  // Initial spawn
   for (let i = 0; i < 3000; i++) spawnFood();
   for (let i = 0; i < 120; i++) spawnPowerup(); 
   
@@ -461,12 +543,17 @@ function initGame() {
 }
 
 function goHome() {
-  document.getElementById('game-over').style.display = 'none';
-  document.getElementById('ui-layer').style.display = 'none';
-  document.getElementById('loading-overlay').style.display = 'none';
-  document.getElementById('lobby').style.display = 'flex';
-  isGameRunning = false;
-  if(ws) ws.close();
+    // Explicitly QUIT
+    if(ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'quit' }));
+        ws.close();
+    }
+    
+    document.getElementById('game-over').style.display = 'none';
+    document.getElementById('ui-layer').style.display = 'none';
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('lobby').style.display = 'flex';
+    isGameRunning = false;
 }
 
 function resetBot(bot) {
@@ -537,24 +624,15 @@ function spawnPowerup() {
   });
 }
 
-// OPTIMIZATION: Avoid Array spread operator in hot loops
 function getRenderedBodyPoints(path, headX, headY, maxLen) {
-    // Manually add head without creating new array if possible, 
-    // but simplified for readability, just avoided excessive spreads later
-    const smooth = path; // Access directly
-    // Note: head is separate, handled by logic below logic
-    
-    // Virtual head point
+    const smooth = path; 
     const h = { x: headX, y: headY };
     
     const points = [];
     let dist = 0;
     let target = SEGMENT_SPACING;
-
-    // Start from Head -> Backwards
     let prev = h;
     
-    // Loop path backwards
     for (let i = smooth.length - 1; i >= 0; i--) {
         const curr = smooth[i];
         const d = Math.hypot(prev.x - curr.x, prev.y - curr.y);
@@ -693,8 +771,14 @@ function update(dt) {
     }
 
     if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
+    
     if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
-      length += (f.r / 4) * currentMult;
+      // SLOWER GROWTH LOGIC:
+      // Instead of adding linear mass, we add less mass as the worm gets bigger.
+      // factor = 1 / (length * constant)
+      const growthFactor = Math.max(0.1, 50 / length);
+      length += (f.r / 4) * currentMult * growthFactor;
+      
       food.splice(i, 1);
       if (!f.isDrops) spawnFood(); 
     }
@@ -742,7 +826,6 @@ function updateBots(dt) {
 
 /* ================= COMBAT LOGIC ================= */
 function getCollisionPath(path, headX, headY, maxLen) {
-    // Re-use the optimized point getter
     return getRenderedBodyPoints(path, headX, headY, maxLen);
 }
 
@@ -970,6 +1053,12 @@ function triggerGameOver() {
 
   isGameOver = true;
   isGameRunning = false;
+  
+  // Explicitly tell server to remove us so we don't become a zombie
+  if(ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'quit' }));
+      ws.close();
+  }
 
   explodeWorm(path, playerColor);
   document.getElementById('final-score').innerText = Math.floor(length * 10);
@@ -1001,7 +1090,6 @@ function isPointUnderWorm(x, y, worm) {
 }
 
 function draw() {
-  // Clear with solid color (faster than clearing rect if full screen)
   ctx.fillStyle = "#0b0b12";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
@@ -1012,13 +1100,13 @@ function draw() {
   ctx.scale(zoom, zoom);
   ctx.translate(-head.x, -head.y);
 
-  // Viewport Culling Bounds
+  // Viewport Culling
   const visibleW = canvas.width / zoom;
   const visibleH = canvas.height / zoom;
-  const viewLeft = head.x - visibleW/2 - 100;
-  const viewRight = head.x + visibleW/2 + 100;
-  const viewTop = head.y - visibleH/2 - 100;
-  const viewBottom = head.y + visibleH/2 + 100;
+  const viewLeft = head.x - visibleW/2 - 200;
+  const viewRight = head.x + visibleW/2 + 200;
+  const viewTop = head.y - visibleH/2 - 200;
+  const viewBottom = head.y + visibleH/2 + 200;
 
   // Draw Map Border
   ctx.beginPath();
@@ -1064,7 +1152,6 @@ function draw() {
     ctx.translate(p.x, p.y);
     const scale = 1 + Math.sin(gameTime * 2) * 0.1;
     ctx.scale(scale, scale);
-    // Fake Shadow instead of Blur
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.beginPath();
     ctx.arc(3, 3, p.r, 0, Math.PI * 2);
@@ -1103,14 +1190,6 @@ function drawRemotePlayers(visibleW, visibleH) {
     });
 }
 
-// OPTIMIZATION: REMOVED shadowBlur completely. Used offset fill.
-function applyFakeShadow(ctx, x, y, r) {
-    ctx.fillStyle = "rgba(0,0,0,0.2)";
-    ctx.beginPath();
-    ctx.arc(x + 2, y + 2, r * 1.2, 0, Math.PI * 2);
-    ctx.fill();
-}
-
 function drawGenericSnake(bot, visibleW, visibleH) {
     if (Math.abs(bot.x - head.x) > visibleW && Math.abs(bot.y - head.y) > visibleH) return;
       
@@ -1124,10 +1203,10 @@ function drawGenericSnake(bot, visibleW, visibleH) {
     const botR = getWormRadius(bot.length);
     if (!bot.path) bot.path = [];
     
-    // OPTIMIZATION: Reuse point logic or inline it
     const pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
     
-    // Shadow Optimization: Fake shadows drawn in a batch FIRST (underneath)
+    // FAKE SHADOW / GLOW LAYER
+    // We draw slightly larger segments in semi-transparent black or glow color
     if (distB < 1200) {
         ctx.fillStyle = "rgba(0,0,0,0.2)";
         for (let i = pointsToDraw.length - 1; i >= 0; i--) {
@@ -1138,25 +1217,28 @@ function drawGenericSnake(bot, visibleW, visibleH) {
         }
     }
 
-    // Draw Body
-    ctx.fillStyle = bot.color;
-    for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-       const p = pointsToDraw[i];
-       
-       ctx.beginPath();
-       ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
-       ctx.fill();
-       
-       if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
-    }
+    // MAIN BODY DRAW
+    // If we have a skin, try to draw it. If not, fallback to color.
+    const hasSkin = false; // Only local player has custom skin for now unless we sync skin IDs
     
-    // Head
-    ctx.fillStyle = bot.color;
-    ctx.beginPath();
-    ctx.arc(bot.x, bot.y, botR * 1.05, 0, Math.PI * 2);
-    ctx.fill();
-    drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
-    
+    if (!hasSkin) {
+        ctx.fillStyle = bot.color;
+        for (let i = pointsToDraw.length - 1; i >= 0; i--) {
+           const p = pointsToDraw[i];
+           ctx.beginPath();
+           ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
+           ctx.fill();
+           if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
+        }
+        
+        // Head
+        ctx.fillStyle = bot.color;
+        ctx.beginPath();
+        ctx.arc(bot.x, bot.y, botR * 1.05, 0, Math.PI * 2);
+        ctx.fill();
+        drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
+    } 
+
     if (distB < 900) {
         ctx.fillStyle = "white";
         ctx.font = "12px Arial";
@@ -1173,16 +1255,16 @@ function drawPlayerBody(visibleW, visibleH) {
 
       const pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
 
+      // Determine segments (Under vs Over)
       const underSegs = [];
       const overSegs = [];
-      
       const enemies = [...bots, ...Object.values(remotePlayers)];
       
       for (let i = 0; i < pointsToDraw.length; i++) {
         const p = pointsToDraw[i];
         let under = false;
+        // Optimization: Distance check
         for (const e of enemies) {
-            // Optimization: Simple distance check before expensive poly check
             if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
                  if (isPointUnderWorm(p.x, p.y, e)) { 
                     under = true; 
@@ -1193,56 +1275,77 @@ function drawPlayerBody(visibleW, visibleH) {
         (under ? underSegs : overSegs).push(p);
       }
 
-      // Draw FAKE shadows for under segments
-      ctx.fillStyle = "rgba(0,0,0,0.2)";
-      underSegs.forEach(p => {
-          ctx.beginPath();
-          ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
-          ctx.fill();
+      const hasSkin = skinManager.currentSkin !== null;
+
+      // 1. Draw Glow/Shadow for UNDER segments
+      underSegs.forEach((p, index) => {
+          if (hasSkin) {
+             skinManager.drawSegment(ctx, p.x, p.y, playerR, index, true);
+          } else {
+             ctx.fillStyle = "rgba(0,0,0,0.2)";
+             ctx.beginPath();
+             ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
+             ctx.fill();
+          }
       });
 
-      // Draw Under Segments
-      ctx.fillStyle = playerColor;
+      // 2. Draw UNDER Segments
       for (let i = underSegs.length - 1; i >= 0; i--) {
         const p = underSegs[i];
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-        ctx.fill();
-        drawSegmentOverlay(ctx, p.x, p.y, playerR);
+        if (hasSkin) {
+            skinManager.drawSegment(ctx, p.x, p.y, playerR, i, false);
+        } else {
+            ctx.fillStyle = playerColor;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
+            ctx.fill();
+            drawSegmentOverlay(ctx, p.x, p.y, playerR);
+        }
       }
 
-      // Draw FAKE shadows for over segments
-      ctx.fillStyle = "rgba(0,0,0,0.2)";
-      overSegs.forEach(p => {
-          ctx.beginPath();
-          ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
-          ctx.fill();
+      // 3. Draw Glow/Shadow for OVER segments
+      overSegs.forEach((p, index) => {
+          if (hasSkin) {
+             skinManager.drawSegment(ctx, p.x, p.y, playerR, index + underSegs.length, true);
+          } else {
+             ctx.fillStyle = "rgba(0,0,0,0.2)";
+             ctx.beginPath();
+             ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
+             ctx.fill();
+          }
       });
 
-      // Draw Over Segments
-      ctx.fillStyle = playerColor;
+      // 4. Draw OVER Segments
       for (let i = overSegs.length - 1; i >= 0; i--) {
         const p = overSegs[i];
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-        ctx.fill();
-        drawSegmentOverlay(ctx, p.x, p.y, playerR);
+        if (hasSkin) {
+            skinManager.drawSegment(ctx, p.x, p.y, playerR, i + underSegs.length, false);
+        } else {
+            ctx.fillStyle = playerColor;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
+            ctx.fill();
+            drawSegmentOverlay(ctx, p.x, p.y, playerR);
+        }
       }
 
-      ctx.fillStyle = playerColor;
-      ctx.beginPath();
-      ctx.arc(head.x, head.y, playerR * 1.05, 0, Math.PI * 2);
-      ctx.fill();
+      // Head
+      if (hasSkin) {
+           // For skin, draw the first base segment again at head position or a specific head sprite
+           skinManager.drawSegment(ctx, head.x, head.y, playerR * 1.05, 0, false);
+      } else {
+           ctx.fillStyle = playerColor;
+           ctx.beginPath();
+           ctx.arc(head.x, head.y, playerR * 1.05, 0, Math.PI * 2);
+           ctx.fill();
+      }
+      
       drawWormateFace(ctx, head.x, head.y, head.angle, playerR);
-
       ctx.globalAlpha = 1;
   }
 }
 
-// OPTIMIZATION: Simplified overlay
 function drawSegmentOverlay(ctx, x, y, r) {
-  // Use a simple arc, no save/restore if possible, but color change requires it
-  // Actually we can batch these if we were smarter, but this is fine for now
   ctx.fillStyle = "rgba(0,0,0,0.2)"; 
   ctx.beginPath();
   ctx.arc(x - r * 0.25, y, r * 0.92, 0, Math.PI * 2);
@@ -1303,8 +1406,6 @@ function drawFood(ctx, f) {
     ctx.strokeStyle = "rgba(0,0,0,0.25)";
     ctx.lineWidth = Math.max(1, f.r * 0.18);
 
-    // OPTIMIZATION: Removed shadowBlur on food too
-    // Draw fake shadow
     if (f.isDrops && !f.noGlow) {
          ctx.save();
          ctx.translate(3,3);
@@ -1414,10 +1515,18 @@ function lerpAngle(a, b, t) {
 }
 
 function getWormRadius(len) {
-  const minR = 11;          
-  const maxR = 20;          
-  const t = Math.min(1, Math.max(0, (len - 40) / 260)); 
-  return minR + (maxR - minR) * (1 - Math.pow(1 - t, 2));
+  // Start THICKER (minR increased from 11 to 20)
+  const minR = 25;          
+  const maxR = 60;          
+  
+  // Use Logarithmic scale so 100000 mass doesn't cover map
+  // log10(50) ~= 1.7, log10(100000) ~= 5
+  // We want to map this range to minR -> maxR
+  
+  const base = Math.log10(Math.max(len, 50));
+  const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); // Maps len 50->500000 roughly
+  
+  return minR + (maxR - minR) * t;
 }
 
 function updateLeaderboardUI() {
