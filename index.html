@@ -993,6 +993,29 @@ function restartGame() {
 }
 
 /* ================= DRAWING / RENDERER ================= */
+// STEP 1: Add helper to check per-point under
+function isPointUnderWorm(x, y, worm) {
+  if (!worm || !worm.path) return false;
+
+  const wormR = getWormRadius(worm.length || 50);
+  const underR = wormR * UNDER_RATIO;
+  const underR2 = underR * underR;
+
+  // Build a light collision path for the worm (head -> back)
+  const coll = getCollisionPath(worm.path, worm.x, worm.y, (worm.length || 50) - 3);
+
+  // Only check front 70% of enemy body (ignore tail for speed)
+  const maxK = Math.floor(coll.length * 0.7);
+
+  for (let k = 0; k < maxK; k += 3) {
+    const p = coll[k];
+    const dx = x - p.x;
+    const dy = y - p.y;
+    if (dx * dx + dy * dy < underR2) return true;
+  }
+  return false;
+}
+
 function draw() {
   ctx.fillStyle = "#0b0b12";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1072,15 +1095,10 @@ function draw() {
   }
 
   // Draw Bots and Player with Layering
-  if (playerIsUnder) {
-      drawPlayerBody(visibleW, visibleH);
-      drawBots(visibleW, visibleH);
-      drawRemotePlayers(visibleW, visibleH);
-  } else {
-      drawBots(visibleW, visibleH);
-      drawRemotePlayers(visibleW, visibleH);
-      drawPlayerBody(visibleW, visibleH);
-  }
+  // STEP 3: Fixed draw order because per-segment logic handles depth now
+  drawBots(visibleW, visibleH);
+  drawRemotePlayers(visibleW, visibleH);
+  drawPlayerBody(visibleW, visibleH);
   
   drawMinimap();
   ctx.restore();
@@ -1209,19 +1227,55 @@ function drawPlayerBody(visibleW, visibleH) {
         if (pointsToDraw.length >= length) break;
       }
 
-      for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-         const p = pointsToDraw[i];
-         
-         // Apply Shadow
-         ctx.save();
-         applyWormShadow(ctx, playerColor, playerR);
-         ctx.beginPath();
-         ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-         ctx.fill();
-         ctx.restore();
+      // STEP 2: Decide under/over per segment
+      const underSegs = [];
+      const overSegs = [];
+      
+      // Build list of "enemy worms" to test against (bots + remote players)
+      const enemies = [...bots, ...Object.values(remotePlayers)];
+      
+      for (let i = 0; i < pointsToDraw.length; i++) {
+        const p = pointsToDraw[i];
 
-         // Wormate-style translucent segment shading
-         drawSegmentOverlay(ctx, p.x, p.y, playerR);
+        let under = false;
+        for (const e of enemies) {
+            if (isPointUnderWorm(p.x, p.y, e)) { 
+                under = true; 
+                break; 
+            }
+        }
+
+        (under ? underSegs : overSegs).push(p);
+      }
+
+      // PASS 1: draw under segments first (goes UNDER enemies)
+      for (let i = underSegs.length - 1; i >= 0; i--) {
+        const p = underSegs[i];
+
+        ctx.save();
+        applyWormShadow(ctx, playerColor, playerR);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
+        ctx.fillStyle = playerColor;
+        ctx.fill();
+        ctx.restore();
+
+        drawSegmentOverlay(ctx, p.x, p.y, playerR);
+      }
+
+      // PASS 2: draw over segments later (normal)
+      for (let i = overSegs.length - 1; i >= 0; i--) {
+        const p = overSegs[i];
+
+        ctx.save();
+        applyWormShadow(ctx, playerColor, playerR);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
+        ctx.fillStyle = playerColor;
+        ctx.fill();
+        ctx.restore();
+
+        drawSegmentOverlay(ctx, p.x, p.y, playerR);
       }
 
       // Head (same color as body, slightly larger)
