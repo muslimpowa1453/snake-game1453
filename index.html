@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Wormate Clone - Multiplayer Beta</title>
+<title>Wormate Clone - Multiplayer</title>
+
+<!-- ========================================== -->
+<!--               STYLE.CSS                    -->
+<!-- ========================================== -->
 <style>
   /* Base Reset */
   body { 
@@ -16,10 +20,10 @@
   /* UI Layer */
   #ui-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
-    display: none;
+    display: none; /* Hidden until game starts */
   }
   
-  /* Minimap */
+  /* Minimap (Top Left) */
   #minimap-container {
     position: absolute; top: 20px; left: 20px;
     width: 150px; height: 150px; background: rgba(0,0,0,0.5);
@@ -28,6 +32,29 @@
     box-shadow: 0 0 10px rgba(0,0,0,0.5);
   }
   #minimap { width: 100%; height: 100%; display: block; }
+
+  /* Stats UI (Under Minimap) */
+  #stats-ui {
+    position: absolute; top: 180px; left: 20px;
+    color: white; font-size: 16px; font-weight: bold;
+    text-shadow: 1px 1px 2px black;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 5px 10px; border-radius: 8px;
+    border: 1px solid #444;
+  }
+  #stats-ui span { color: #ffd700; margin-left: 5px; }
+
+  /* Status Box (Below Stats) */
+  #status-box {
+    position: absolute; top: 220px; left: 20px;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  }
+  .buff {
+    background: rgba(0, 0, 0, 0.6); color: white; padding: 8px 15px; border-radius: 20px;
+    font-size: 14px; font-weight: bold; border-left: 5px solid; display: none;
+    align-items: center; gap: 10px; min-width: 100px; justify-content: space-between;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  }
 
   /* Leaderboard */
   #leaderboard {
@@ -38,11 +65,18 @@
   .lb-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
   .lb-me { color: #00ff00; font-weight: bold; }
   
-  /* Connection Status */
-  #status-msg {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    color: #ff3333; font-weight: bold; background: rgba(0,0,0,0.7);
-    padding: 5px 15px; border-radius: 20px; display: none;
+  /* Clock */
+  #clock-display {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px;
+    color: white; font-size: 20px; font-weight: bold; letter-spacing: 1px;
+    border: 1px solid #444;
+  }
+
+  /* FPS Counter */
+  #fps-box {
+    position: absolute; bottom: 10px; right: 10px; color: #00ff00;
+    font-family: monospace; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
   }
 
   /* Game Over Screen */
@@ -62,7 +96,9 @@
   }
   .btn-green { background: #00cc66; }
   .btn-green:hover { transform: scale(1.1); background: #00ee77; }
-  
+  .btn-blue { background: #3366ff; }
+  .btn-blue:hover { transform: scale(1.1); background: #5588ff; }
+
   /* Lobby Screen */
   #lobby {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -83,377 +119,1284 @@
 </head>
 <body>
 
-<canvas id="game"></canvas>
-<div id="status-msg">Connecting to server...</div>
+<!-- ========================================== -->
+<!--               INDEX.HTML BODY              -->
+<!-- ========================================== -->
 
+<canvas id="game"></canvas>
+
+<!-- SOUNDS -->
+<audio id="hs-audio" src="https://wormx.store/video/hs_2.mp3"></audio>
+
+<!-- LOBBY -->
 <div id="lobby">
-  <h1>WORMATE ONLINE</h1>
+  <h1>WORMATE CLONE</h1>
   <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-  <button class="menu-btn btn-green" onclick="startGame()">PLAY ONLINE</button>
-  <p style="color: #666; margin-top: 20px;">Server: Frankfurt (Render)</p>
+  <button class="menu-btn btn-green" onclick="startGame()">PLAY</button>
 </div>
 
+<!-- UI LAYER -->
 <div id="ui-layer">
-  <div id="minimap-container"><canvas id="minimap"></canvas></div>
+  <!-- Minimap -->
+  <div id="minimap-container">
+    <canvas id="minimap"></canvas>
+  </div>
+
+  <!-- Stats UI -->
+  <div id="stats-ui">
+      Kills: <span id="kill-count">0</span> | HS: <span id="hs-count">0</span>
+  </div>
+
+  <!-- Clock -->
+  <div id="clock-display">00:00</div>
+
+  <!-- Status Box -->
+  <div id="status-box">
+    <div id="buff-x2" class="buff" style="border-color: #ff9900;"><span>2x Score</span> <span id="time-x2">0s</span></div>
+    <div id="buff-x5" class="buff" style="border-color: #ff3300;"><span>5x Score</span> <span id="time-x5">0s</span></div>
+    <div id="buff-x10" class="buff" style="border-color: #ff0066;"><span>10x Score</span> <span id="time-x10">0s</span></div>
+    <div id="buff-ae" class="buff" style="border-color: #00ffcc;"><span>Turn (ae)</span> <span id="time-ae">0s</span></div>
+    <div id="buff-spd" class="buff" style="border-color: #aa00ff;"><span>Speed</span> <span id="time-spd">0s</span></div>
+  </div>
+  
   <div id="leaderboard">
-    <h3>Leaderboard <span id="online-count">(0)</span></h3>
+    <h3>Leaderboard <span id="online-count">(0 online)</span></h3>
     <div id="lb-content"></div>
   </div>
+
+  <div id="fps-box">FPS: 60</div>
 </div>
 
+<!-- GAME OVER -->
 <div id="game-over">
   <h1>GAME OVER</h1>
   <p style="font-size: 24px; margin-bottom: 30px;">Score: <span id="final-score" style="color: #ffd700;">0</span></p>
-  <button class="menu-btn btn-green" onclick="restartGame()">Play Again</button>
+  <div class="btn-group">
+    <button class="menu-btn btn-blue" onclick="goHome()">Home</button>
+    <button class="menu-btn btn-green" onclick="restartGame()">Play Again</button>
+  </div>
 </div>
 
+<!-- ========================================== -->
+<!--               GAME.JS                      -->
+<!-- ========================================== -->
 <script>
-/* ================= CONFIGURATION ================= */
-// YOUR RENDER SERVER URL
-const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
+/* ================= SERVER CONNECTION ================= */
+// REPLACE THIS WITH YOUR RENDER URL (e.g., wss://snake-game-1453.onrender.com)
+const SERVER_URL = "wss://snake-server-3bnw.onrender.com"; 
 
-const CANVAS = document.getElementById("game");
-const CTX = CANVAS.getContext("2d", { alpha: true, desynchronized: true });
-const MINI_CANVAS = document.getElementById("minimap");
-const MINI_CTX = MINI_CANVAS.getContext("2d");
-
-const MAP_RADIUS = 3000; 
-const SEGMENT_SPACING = 5;
-const BASE_SPEED = 2.0;
-
-let socket;
+let ws = null;
 let myId = null;
-let opponents = {}; // Stores other players: { id: { x,y,angle,path,color,name } }
+let remotePlayers = {};
 
-/* ================= VARIABLES ================= */
-let isGameRunning = false;
-let isGameOver = false;
-let zoom = 1.0;
-let playerName = "Player";
-let playerColor = "#ff66cc";
+function connectToServer() {
+  if (ws) {
+      ws.close();
+  }
+  
+  try {
+      ws = new WebSocket(SERVER_URL);
 
-let head = { x: 0, y: 0, angle: 0 };
-let length = 50;
-let path = [];
+      ws.onopen = () => {
+          console.log("Connected to Game Server");
+      };
 
-let mouse = { x: window.innerWidth/2, y: window.innerHeight/2 };
-let lastTime = performance.now();
-let lastSendTime = 0;
+      ws.onmessage = (event) => {
+          try {
+              const data = JSON.parse(event.data);
+              
+              if (data.type === 'init') {
+                  myId = data.selfId;
+              } 
+              else if (data.type === 'state') {
+                  // Update remote players list
+                  // Filter out ourselves so we don't draw a ghost
+                  const newRemotePlayers = {};
+                  data.players.forEach(p => {
+                      if (p.id !== myId) {
+                          newRemotePlayers[p.id] = p;
+                      }
+                  });
+                  remotePlayers = newRemotePlayers;
+              }
+              else if (data.type === 'remove') {
+                  delete remotePlayers[data.id];
+              }
 
-/* ================= RESIZE ================= */
+          } catch (e) {
+              console.error("Error parsing server message", e);
+          }
+      };
+
+      ws.onclose = () => {
+          console.log("Disconnected from Server");
+      };
+      
+      ws.onerror = (err) => {
+          console.error("WebSocket Error:", err);
+      };
+  } catch (e) {
+      console.log("Could not connect to server (Offline Mode)");
+  }
+}
+
+/* ================= GLOBAL SETUP ================= */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true }); 
+const minimapCanvas = document.getElementById("minimap");
+const miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
+
 function resize() {
-  CANVAS.width = window.innerWidth;
-  CANVAS.height = window.innerHeight;
-  MINI_CANVAS.width = 150;
-  MINI_CANVAS.height = 150;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  minimapCanvas.width = 150;
+  minimapCanvas.height = 150;
 }
 resize();
 window.addEventListener("resize", resize);
 
-/* ================= INPUT ================= */
+/* ================= CONFIGURATION ================= */
+const SEGMENT_SPACING = 5;
+const SEGMENT_RADIUS = 7;
+// STEP 2A: Lower PATH_SPACING for smoother, denser path
+const PATH_SPACING = 1; 
+const MAP_RADIUS = 6000; 
+
+const BASE_SPEED = 2.0; 
+const MANUAL_BOOST_ADD = 2.2; 
+const POWERUP_SPEED_MULT = 1.5; 
+
+// Turning Physics
+const TURN_SPEED_WIDE = 0.075; 
+const TURN_SPEED_BOOST = 0.12; 
+const TURN_SPEED_SHARP = 0.18; 
+const MASS_LOSS_PER_TICK = 0.03;
+
+const UNDER_RATIO = 0.70;          // 70% of body is "under"/non-collidable (Revised)
+const COLLISION_OVER_RATIO = 1.00; // top layer uses full radius
+
+/* ================= GAME VARIABLES ================= */
+let isGameRunning = false;
+let isGameOver = false;
+let gameTime = 0;
+let startTime = 0;
+let zoom = 1.0; 
+let playerName = "Player";
+let playerColor = "#ff66cc"; 
+
+let head = { x: 0, y: 0, angle: 0 };
+let length = 50;
+let path = [];
+let food = [];
+let powerups = [];
+let killCount = 0;
+let hsCount = 0;
+let playerIsUnder = false; // Visual layering flag
+
+let expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
+
+let lastTime = performance.now();
+let frameCount = 0;
+let lastFpsUpdate = 0;
+let lastBotsVsBotsTime = 0; // Added for bot logic throttling
+
+// REDUCED TO 100 BOTS AS REQUESTED
+let bots = Array.from({ length: 100 }, (_, i) => ({
+  name: `Bot_${String(i + 1).padStart(3, '0')}`,
+  score: 0,
+  x: 0, y: 0,
+  angle: 0,
+  path: [],
+  color: "#00ff00"
+}));
+
+/* ================= INPUT HANDLING ================= */
+let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+let moving = true;
+let boosting = false;
+
 window.addEventListener("mousemove", e => {
   mouse.x = e.clientX;
   mouse.y = e.clientY;
 });
+window.addEventListener("mousedown", () => boosting = true);
+window.addEventListener("mouseup", () => boosting = false);
+
 window.addEventListener("wheel", e => {
-  zoom -= e.deltaY * 0.001;
-  if(zoom < 0.3) zoom = 0.3;
-  if(zoom > 1.5) zoom = 1.5;
+  const zoomSpeed = 0.001;
+  zoom -= e.deltaY * zoomSpeed;
+  if (zoom < 0.3) zoom = 0.3; 
+  if (zoom > 1.5) zoom = 1.5; 
 }, { passive: true });
 
-/* ================= NETWORKING ================= */
-function connectToServer() {
-    const statusEl = document.getElementById('status-msg');
-    statusEl.style.display = 'block';
-    statusEl.innerText = "Connecting...";
-
-    socket = new WebSocket(SERVER_URL);
-
-    socket.onopen = () => {
-        console.log("Connected to Game Server");
-        statusEl.style.display = 'none';
-    };
-
-    socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'init') {
-            myId = msg.selfId;
-            console.log("My ID is:", myId);
-        }
-        else if (msg.type === 'state') {
-            // Update opponents list
-            // Remove myself from the list so I don't draw myself twice
-            const serverPlayers = msg.players;
-            opponents = {};
-            serverPlayers.forEach(p => {
-                if (p.id !== myId) {
-                    opponents[p.id] = p;
-                }
-            });
-            updateLeaderboard();
-        }
-        else if (msg.type === 'remove') {
-            delete opponents[msg.id];
-        }
-    };
-
-    socket.onclose = () => {
-        statusEl.style.display = 'block';
-        statusEl.innerText = "Disconnected from Server";
-    };
-    
-    socket.onerror = (err) => {
-        console.error("Socket error", err);
-    }
-}
-
-/* ================= GAME LOGIC ================= */
+/* ================= GAME LIFECYCLE ================= */
 function startGame() {
   const input = document.getElementById('nickname-input');
   playerName = input.value.trim() || "Player";
   
-  // Connect if not connected
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-      connectToServer();
-  }
-
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('ui-layer').style.display = 'block';
-  document.getElementById('game-over').style.display = 'none';
   
+  connectToServer(); // Connect when playing
   initGame();
 }
 
 function initGame() {
-  // Random Spawn
-  head.x = (Math.random() - 0.5) * 1000;
-  head.y = (Math.random() - 0.5) * 1000;
-  head.angle = Math.random() * Math.PI * 2;
-  length = 50;
-  path = [];
+  food.length = 0;
+  powerups.length = 0;
+  // 1. Reset Bots FIRST so their positions are final before we check for spawn safety
+  bots.forEach(resetBot);
+
+  // RANDOM SAFE SPAWN LOGIC
+  let safe = false;
+  let attempts = 0;
+  let startX = 0, startY = 0;
   
-  // Init path
-  for(let i=0; i<length*SEGMENT_SPACING; i+=SEGMENT_SPACING) {
-      path.push({x: head.x, y: head.y});
+  while (!safe && attempts < 200) {
+      startX = (Math.random() - 0.5) * (MAP_RADIUS * 1.8);
+      startY = (Math.random() - 0.5) * (MAP_RADIUS * 1.8);
+      
+      let tooClose = false;
+      // Check distance to bots (checking against their NEW positions now)
+      for (const bot of bots) {
+          // Check Head
+          if (Math.hypot(startX - bot.x, startY - bot.y) < 500) { tooClose = true; break; }
+          // Check Body (sample)
+          if (bot.path) {
+              for (let k = 0; k < bot.path.length; k+=10) {
+                  if (Math.hypot(startX - bot.path[k].x, startY - bot.path[k].y) < 300) {
+                      tooClose = true; 
+                      break; 
+                  }
+              }
+          }
+          if (tooClose) break;
+      }
+      if (!tooClose) safe = true;
+      attempts++;
   }
 
-  playerColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+  head = { x: startX, y: startY, angle: Math.random() * Math.PI * 2 };
+  length = 50;
+  
+  // Important: Initialize path with new head position to prevent glitches
+  path = [];
+  for(let i=0; i<length*SEGMENT_SPACING; i+=SEGMENT_SPACING) {
+      path.push({x: startX, y: startY});
+  }
+
+  food = [];
+  powerups = [];
+  killCount = 0;
+  hsCount = 0;
+  updateStatsUI();
   
   isGameOver = false;
   isGameRunning = true;
-  lastTime = performance.now();
-  loop();
+  startTime = Date.now();
+  lastTime = performance.now(); // Reset time to prevent big dt jump
+  lastBotsVsBotsTime = 0;
+  
+  playerColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+
+  expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
+  
+  // Initial spawn
+  for (let i = 0; i < 3000; i++) spawnFood();
+  for (let i = 0; i < 120; i++) spawnPowerup(); 
+  
+  document.getElementById('game-over').style.display = 'none';
 }
 
-function restartGame() {
-    initGame();
-    document.getElementById('game-over').style.display = 'none';
+function goHome() {
+  document.getElementById('game-over').style.display = 'none';
+  document.getElementById('ui-layer').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  isGameRunning = false;
+  if(ws) ws.close();
 }
 
+function resetBot(bot) {
+    bot.x = (Math.random() - 0.5) * MAP_RADIUS * 1.5;
+    bot.y = (Math.random() - 0.5) * MAP_RADIUS * 1.5;
+    bot.angle = Math.random() * Math.PI * 2;
+    bot.path = [];
+    
+    // INCREASED MASS: 7000 Mass ~= 700 Length (Score = Length * 10)
+    bot.length = 700; 
+    
+    bot.score = Math.floor(bot.length * 10);
+    bot.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+    for(let k=0; k < bot.length * SEGMENT_SPACING; k+= SEGMENT_SPACING) {
+        bot.path.push({x: bot.x, y: bot.y});
+    }
+}
+
+/* ================= ENTITY MANAGEMENT ================= */
+function spawnFood(x, y, val, colorOverride) {
+  // Types: 0=Donut, 1=Candy, 2=Cookie
+  const type = Math.floor(Math.random() * 3);
+  let r = val || (7 + Math.random() * 3); // Bigger natural food
+  const now = Date.now();
+  
+  // Food from dead worms (has expiration, NO VELOCITY)
+  if (x !== undefined && y !== undefined) {
+      food.push({
+        x: x, y: y,
+        r: r * 1.15, // Slightly bigger drops
+        color: colorOverride || `hsl(${Math.random() * 360}, 100%, 50%)`,
+        type: type,
+        angle: Math.random() * Math.PI * 2,
+        spawnTime: now, 
+        isDrops: true,
+        noGlow: true,
+        vx: 0, vy: 0 
+      });
+      return;
+  }
+
+  // Natural food (permanent)
+  const angle = Math.random() * Math.PI * 2;
+  const dist = Math.sqrt(Math.random()) * (MAP_RADIUS - 50);
+  food.push({
+    x: Math.cos(angle) * dist, y: Math.sin(angle) * dist,
+    r: r,
+    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+    type: type,
+    angle: Math.random() * Math.PI * 2,
+    spawnTime: 0,
+    isDrops: false,
+    vx: 0, vy: 0
+  });
+}
+
+function spawnPowerup() {
+  const angle = Math.random() * Math.PI * 2;
+  const r = Math.sqrt(Math.random()) * (MAP_RADIUS - 100);
+  const types = ['2x', '5x', '10x', 'ae', 'spd'];
+  const type = types[Math.floor(Math.random() * types.length)];
+  let color = '#fff', label = type;
+  
+  if(type === '2x') color = '#ff9900';
+  if(type === '5x') color = '#ff3300';
+  if(type === '10x') color = '#ff0066';
+  if(type === 'ae') { color = '#00ffcc'; label = "Turn"; }
+  if(type === 'spd') { color = '#aa00ff'; label = "Speed"; }
+
+  powerups.push({
+    x: Math.cos(angle) * r, y: Math.sin(angle) * r,
+    type: type, label: label,
+    color: color, r: 15
+  });
+}
+
+function getRenderedBodyPoints(path, headX, headY, maxLen) {
+    const smooth = [...path, { x: headX, y: headY }];
+    const points = [];
+    let dist = 0;
+    let target = SEGMENT_SPACING;
+
+    for (let i = smooth.length - 1; i > 0; i--) {
+        const a = smooth[i];
+        const b = smooth[i - 1];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+
+        while (dist + d >= target) {
+            const t = (target - dist) / d;
+            points.push({
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t
+            });
+            target += SEGMENT_SPACING;
+            if (points.length >= maxLen) return points;
+        }
+        dist += d;
+    }
+    return points;
+}
+
+function explodeWorm(pathArr, skinColor) {
+    const body = getRenderedBodyPoints(pathArr, pathArr[pathArr.length-1]?.x || 0, pathArr[pathArr.length-1]?.y || 0, pathArr.length);
+    let i = 0;
+
+    function spawnBatch() {
+        let count = 0;
+        while (i < body.length && count < 20) {
+            const p = body[i];
+            spawnFood(
+                p.x + (Math.random() - 0.5) * 2,
+                p.y + (Math.random() - 0.5) * 2,
+                5 + Math.random() * 10,
+                skinColor
+            );
+            i += 4;
+            count++;
+        }
+        if (i < body.length) {
+            requestAnimationFrame(spawnBatch);
+        }
+    }
+
+    spawnBatch();
+}
+
+/* ================= UPDATE LOOP ================= */
 function update(dt) {
   if (isGameOver || !isGameRunning) return;
+  const now = Date.now();
+  gameTime += 0.05 * dt;
 
-  // Turning
-  const dx = mouse.x - CANVAS.width / 2;
-  const dy = mouse.y - CANVAS.height / 2;
-  const dist = Math.hypot(dx, dy);
+  // Clock Update
+  const elapsed = Math.floor((now - startTime) / 1000);
+  const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const secs = (elapsed % 60).toString().padStart(2, '0');
+  document.getElementById('clock-display').innerText = `${mins}:${secs}`;
 
-  if (dist > 20) {
+  // Buffs
+  updateBuffUI('buff-x2', 'time-x2', expiries.x2, now);
+  updateBuffUI('buff-x5', 'time-x5', expiries.x5, now);
+  updateBuffUI('buff-x10', 'time-x10', expiries.x10, now);
+  updateBuffUI('buff-ae', 'time-ae', expiries.ae, now);
+  updateBuffUI('buff-spd', 'time-spd', expiries.spd, now);
+
+  let currentMult = 1;
+  if (now < expiries.x2) currentMult *= 2;
+  if (now < expiries.x5) currentMult *= 5;
+  if (now < expiries.x10) currentMult *= 10;
+
+  let spd = BASE_SPEED;
+  
+  // Physics applied with dt
+  if (boosting && length > 20) {
+    let boostAmount = MANUAL_BOOST_ADD;
+    if (now < expiries.spd) boostAmount *= POWERUP_SPEED_MULT;
+    
+    spd += boostAmount;
+    length -= MASS_LOSS_PER_TICK * dt;
+  }
+
+  const isSharp = (now < expiries.ae);
+
+  // Player Turning
+  const dx = mouse.x - canvas.width / 2;
+  const dy = mouse.y - canvas.height / 2;
+  const distToMouse = Math.hypot(dx, dy);
+
+  if (distToMouse > 20) {
     const targetAngle = Math.atan2(dy, dx);
-    let diff = targetAngle - head.angle;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    head.angle += diff * 0.1; // Turn speed
+    let baseTurnSpeed = TURN_SPEED_WIDE;
+    if (boosting) baseTurnSpeed = TURN_SPEED_BOOST;
+    if (isSharp) baseTurnSpeed = TURN_SPEED_SHARP;
+    
+    // STEP 2B: Clamp turn speed for smoother interpolation
+    let turnSpd = baseTurnSpeed * dt; 
+    if (turnSpd > 0.35) turnSpd = 0.35;
+    head.angle = lerpAngle(head.angle, targetAngle, turnSpd);
   }
 
-  // Move
-  const speed = BASE_SPEED * dt;
-  head.x += Math.cos(head.angle) * speed;
-  head.y += Math.sin(head.angle) * speed;
+  // Player Movement
+  if (moving) {
+    head.x += Math.cos(head.angle) * spd * dt; 
+    head.y += Math.sin(head.angle) * spd * dt;
 
-  // Path Logic
-  const last = path[path.length - 1];
-  if (!last || Math.hypot(head.x - last.x, head.y - last.y) >= SEGMENT_SPACING) {
-    path.push({ x: head.x, y: head.y });
+    const last = path[path.length - 1];
+    if (!last || Math.hypot(head.x - last.x, head.y - last.y) >= PATH_SPACING) {
+      path.push({ x: head.x, y: head.y });
+    }
   }
-  const maxPath = length * SEGMENT_SPACING + 50;
+
+  const maxPath = length * SEGMENT_SPACING + 150;
   if (path.length > maxPath) path.splice(0, path.length - maxPath);
 
-  // Map Boundaries
-  if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
-      triggerGameOver();
-  }
-
-  // COLLISION (Client side check for simplicity)
-  checkCollisions();
-
-  // Send Data to Server (throttled to 20 times a second approx)
-  const now = Date.now();
-  if (now - lastSendTime > 50 && socket && socket.readyState === WebSocket.OPEN && myId) {
-      socket.send(JSON.stringify({
+  // Send Data to Server
+  if (ws && ws.readyState === WebSocket.OPEN) {
+      const payload = {
           type: 'move',
           x: head.x,
           y: head.y,
           angle: head.angle,
           length: length,
-          path: path, // Sending path to simple server
+          path: path,
           name: playerName
-      }));
-      lastSendTime = now;
+      };
+      ws.send(JSON.stringify(payload));
   }
+
+  if (Math.hypot(head.x, head.y) > MAP_RADIUS) triggerGameOver();
+
+  // Food Physics + Collision
+  for (let i = food.length - 1; i >= 0; i--) {
+    const f = food[i];
+    
+    // Expiration (40s = 40000ms)
+    if (f.isDrops && (now - f.spawnTime > 40000)) {
+        food.splice(i, 1);
+        continue;
+    }
+
+    // Collision Player
+    if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
+    if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
+      length += (f.r / 4) * currentMult;
+      food.splice(i, 1);
+      // Spawn replacements for natural food to keep map populated
+      if (!f.isDrops) spawnFood(); 
+    }
+  }
+
+  // Powerups Collision
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const p = powerups[i];
+    p.x += Math.cos(gameTime + i) * 0.5 * dt; 
+    if (Math.abs(head.x - p.x) > 50 || Math.abs(head.y - p.y) > 50) continue;
+    if (Math.hypot(head.x - p.x, head.y - p.y) < getWormRadius(length) + p.r + 10) {
+      applyPowerup(p.type);
+      powerups.splice(i, 1);
+      setTimeout(spawnPowerup, 5000);
+    }
+  }
+  
+  updateBots(dt);
+  checkCombat(); 
+  updateLeaderboardUI();
 }
 
-function checkCollisions() {
-    // Check against opponents
-    for (const id in opponents) {
-        const opp = opponents[id];
-        if (!opp.path) continue;
+function updateBots(dt) {
+    bots.forEach(bot => {
+        if (Math.random() < 0.05 * dt) { 
+            bot.targetAngle = (Math.random() * Math.PI * 2);
+        }
+        if (Math.hypot(bot.x, bot.y) > MAP_RADIUS - 200) {
+            bot.targetAngle = Math.atan2(-bot.y, -bot.x);
+        }
+        bot.angle = lerpAngle(bot.angle, bot.targetAngle || bot.angle, 0.05 * dt);
+        bot.x += Math.cos(bot.angle) * BASE_SPEED * dt;
+        bot.y += Math.sin(bot.angle) * BASE_SPEED * dt;
 
-        // Simple collision: Head hits Opponent Body
-        for (let i = 0; i < opp.path.length; i += 3) { // Check every 3rd point
-            const p = opp.path[i];
-            const dist = Math.hypot(head.x - p.x, head.y - p.y);
-            
-            // 15 is approx radius sum
-            if (dist < 20) {
-                triggerGameOver();
-                return;
+        const last = bot.path[bot.path.length - 1];
+        if (!last || Math.hypot(bot.x - last.x, bot.y - last.y) >= PATH_SPACING) {
+            bot.path.push({ x: bot.x, y: bot.y });
+        }
+        const maxPath = bot.length * SEGMENT_SPACING + 150;
+        if (bot.path.length > maxPath) bot.path.splice(0, bot.path.length - maxPath);
+        
+        bot.score = Math.floor(bot.length * 10);
+    });
+}
+
+/* ================= COMBAT LOGIC ================= */
+function getCollisionPath(path, headX, headY, maxLen) {
+    const smooth = [...path, { x: headX, y: headY }];
+    const points = [];
+    let dist = 0, target = SEGMENT_SPACING;
+
+    for (let i = smooth.length - 1; i > 0; i--) {
+        const a = smooth[i], b = smooth[i - 1];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        while (dist + d >= target) {
+            const t = (target - dist) / d;
+            points.push({
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t
+            });
+            target += SEGMENT_SPACING;
+            if (points.length >= maxLen) return points;
+        }
+        dist += d;
+    }
+    return points;
+}
+
+function checkCombat() {
+    if (isGameOver || !isGameRunning) return;
+    const killRadiusPlayer = getWormRadius(length) * 2;
+    playerIsUnder = false;
+
+    // STEP 3A: Make skip amount proportional and smaller for better neck hits
+    // Helper to check standard head-body hits
+    // Returns TRUE if attacker hits victim body
+    const checkHit = (attackerHead, victimPath, victimLen, attackerKillRadius) => {
+        // victim's body thickness
+        const victimR = getWormRadius(victimLen);
+
+        // "under" safe zone (you can pass through)
+        const underR = victimR * UNDER_RATIO;
+
+        // "over" deadly zone (top layer) - THINNER DEADLY RING
+        const overR = victimR * COLLISION_OVER_RATIO + attackerKillRadius * 0.08;
+
+        const skipTail = Math.min(6, Math.floor(victimPath.length * 0.2));
+
+        for (let k = 0; k < victimPath.length - skipTail; k += 3) {
+            const p = victimPath[k];
+
+            const dx = attackerHead.x - p.x;
+            const dy = attackerHead.y - p.y;
+
+            // quick reject
+            if (Math.abs(dx) > overR + 6 || Math.abs(dy) > overR + 6) continue;
+
+            const d = Math.hypot(dx, dy);
+
+            // inside safe-under zone => ignore collision (you slide under)
+            if (d < underR) continue;
+
+            // in the ring between under and over => collision (hit the top layer)
+            if (d < overR) return true;
+        }
+
+        return false;
+    };
+
+    const getNeckPath = (fullCollisionPath, neckSegments) => {
+        // collision path is ordered from head backwards (because of how getCollisionPath builds it)
+        // so neck is the first N points
+        return fullCollisionPath.slice(0, Math.max(0, neckSegments));
+    };
+
+    // Helper: Head-to-Head Resolution
+    // Returns: 0=NoCollision, 1=A wins, 2=B wins, 3=Both die
+    // STEP 1A: Change resolveHeadOn signature to accept collision paths
+    const resolveHeadOn = (a, b, aLen, bLen, aColl, bColl) => {
+        const aKillR = getWormRadius(aLen) * 2;
+        const bKillR = getWormRadius(bLen) * 2;
+
+        // Direct head-to-head proximity check (kept)
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (dist < Math.max(aKillR, bKillR) && dist > getWormRadius(Math.min(aLen, bLen)) * 0.8) {
+            const distA = Math.hypot(a.x, a.y);
+            const distB = Math.hypot(b.x, b.y);
+
+            const dotA = (-a.x * Math.cos(a.angle)) + (-a.y * Math.sin(a.angle));
+            const dotB = (-b.x * Math.cos(b.angle)) + (-b.y * Math.sin(b.angle));
+
+            if (distA > distB && dotA > 0) return 1;
+            if (distB > distA && dotB > 0) return 2;
+            return 3;
+        }
+
+        // NECK HEADSHOT EXTENSION:
+        // If A head touches B neck -> A wins (HS)
+        // If B head touches A neck -> B wins (HS)
+        // "Neck size" scales a bit with thickness so it feels Wormate-like.
+        const neckPointsA = 10 + Math.floor(getWormRadius(aLen) * 0.9); // ~20-28ish
+        const neckPointsB = 10 + Math.floor(getWormRadius(bLen) * 0.9);
+
+        // STEP 1B: Use passed-in cached paths
+        // Removed duplicate getCollisionPath calls here
+
+        const aNeck = getNeckPath(aColl, neckPointsA);
+        const bNeck = getNeckPath(bColl, neckPointsB);
+
+        // Use victimLen to get correct radius
+        const aHitsBNeck = checkHit(a, bNeck, bLen, aKillR);
+        const bHitsANeck = checkHit(b, aNeck, aLen, bKillR);
+
+        if (aHitsBNeck && bHitsANeck) return 3; // both clipped neck area same tick
+        if (aHitsBNeck) return 1;
+        if (bHitsANeck) return 2;
+
+        return 0;
+    };
+
+    // STEP 1A: Cache path computations
+    const playerCollPath = getCollisionPath(path, head.x, head.y, length - 3);
+    const botCollPaths = new Array(bots.length);
+    for(let i=0; i<bots.length; i++) {
+        const b = bots[i];
+        botCollPaths[i] = getCollisionPath(b.path, b.x, b.y, b.length - 3);
+    }
+
+    // 1. Player vs Bots
+    for (let i = 0; i < bots.length; i++) {
+        let b = bots[i];
+        
+        // Check "under" status for visual layering
+        const botR = getWormRadius(b.length);
+        const underR = botR * UNDER_RATIO;
+        if (Math.hypot(head.x - b.x, head.y - b.y) < underR) playerIsUnder = true;
+
+        // Standard Body Hit: Player hits Bot Body -> Player dies
+        // STEP 1B: Use cached path
+        const botCollisionPath = botCollPaths[i];
+        // Pass victim length (b.length) and just getWormRadius(length) for attacker radius
+        if (checkHit(head, botCollisionPath, b.length, getWormRadius(length))) {
+            triggerGameOver();
+            return;
+        }
+
+        // Standard Body Hit: Bot hits Player Body -> Bot dies
+        // STEP 1B: Use playerCollPath instead of raw path slice
+        // Pass victim length (length) and just getWormRadius(b.length) for attacker radius
+        if (playerCollPath.length > 30 && checkHit(b, playerCollPath, length, getWormRadius(b.length))) {
+            killBot(i);
+            killCount++; // Body Kill
+            updateStatsUI();
+            continue; // Bot dead
+        }
+
+        // Head-on Check
+        // STEP 1C: Pass cached collision paths
+        const res = resolveHeadOn(head, b, length, b.length, playerCollPath, botCollPaths[i]);
+        if (res === 1) { 
+            killBot(i); 
+
+            // HS ONLY — NO KILL
+            hsCount++; 
+
+            updateStatsUI(); 
+
+            const audio = document.getElementById('hs-audio');
+            if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            }
+
+            continue;
+        } // Player wins
+        else if (res === 2) { triggerGameOver(); return; } // Bot wins
+        else if (res === 3) { triggerGameOver(); return; } // Both die
+    }
+
+    // STEP 2: Throttle Bot-vs-Bot checks (run 5 times per second)
+    const now = Date.now();
+    const doBotsVsBots = (now - lastBotsVsBotsTime) > 200; // every 200ms = 5x/sec
+    if (doBotsVsBots) {
+        lastBotsVsBotsTime = now;
+        
+        // 2. Bots vs Bots
+        for (let i = bots.length - 1; i >= 0; i--) {
+            let b1 = bots[i];
+            let died = false;
+
+            for (let j = 0; j < bots.length; j++) {
+                if (i === j) continue;
+                let b2 = bots[j];
+                
+                // Body hits
+                // STEP 1B: Use cached path
+                const b2CollisionPath = botCollPaths[j];
+                // Pass victim length (b2.length) and just getWormRadius(b1.length) for attacker radius
+                if (checkHit(b1, b2CollisionPath, b2.length, getWormRadius(b1.length))) {
+                    killBot(i);
+                    died = true;
+                    break;
+                }
+
+                // Head hits
+                // STEP 1C: Pass cached collision paths
+                const res = resolveHeadOn(b1, b2, b1.length, b2.length, botCollPaths[i], botCollPaths[j]);
+                if (res === 1) { /* b1 wins */ }
+                else if (res === 2) { killBot(i); died = true; break; }
+                else if (res === 3) { killBot(i); died = true; break; }
             }
         }
     }
 }
 
-function triggerGameOver() {
-    isGameOver = true;
-    isGameRunning = false;
-    document.getElementById('final-score').innerText = Math.floor(length * 10);
-    document.getElementById('game-over').style.display = 'flex';
+function updateStatsUI() {
+    document.getElementById('kill-count').innerText = killCount;
+    document.getElementById('hs-count').innerText = hsCount;
 }
 
-/* ================= RENDER ================= */
+function killBot(index) {
+    const b = bots[index];
+    explodeWorm(b.path, b.color);
+    resetBot(b);
+}
+
+function updateBuffUI(id, timeId, expiry, now) {
+  const el = document.getElementById(id);
+  if (now < expiry) {
+    el.style.display = 'flex';
+    const left = Math.ceil((expiry - now) / 1000);
+    document.getElementById(timeId).innerText = left + "s";
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function applyPowerup(type) {
+  const duration = 30000;
+  const now = Date.now();
+  if (type === '2x') expiries.x2 = now + duration;
+  if (type === '5x') expiries.x5 = now + duration;
+  if (type === '10x') expiries.x10 = now + duration;
+  if (type === 'ae') expiries.ae = now + duration;
+  if (type === 'spd') expiries.spd = now + duration;
+}
+
+function triggerGameOver() {
+  if (isGameOver) return;
+
+  isGameOver = true;
+  isGameRunning = false;
+
+  explodeWorm(path, playerColor);
+  document.getElementById('final-score').innerText = Math.floor(length * 10);
+  document.getElementById('game-over').style.display = 'flex';
+}
+
+function restartGame() {
+  isGameOver = false;
+  isGameRunning = true;
+  gameTime = 0;
+  lastTime = performance.now();
+
+  initGame();
+}
+
+/* ================= DRAWING / RENDERER ================= */
 function draw() {
-  CTX.fillStyle = "#0b0b12";
-  CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
+  ctx.fillStyle = "#0b0b12";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  if (!isGameRunning && !isGameOver) return; 
+  if (!isGameRunning) return; 
 
-  CTX.save();
-  CTX.translate(CANVAS.width / 2, CANVAS.height / 2);
-  CTX.scale(zoom, zoom);
-  CTX.translate(-head.x, -head.y);
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-head.x, -head.y);
 
-  // Map Border
-  CTX.beginPath();
-  CTX.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
-  CTX.strokeStyle = "#ff3333";
-  CTX.lineWidth = 20;
-  CTX.stroke();
-  CTX.fillStyle = "#161621";
-  CTX.fill();
+  // Viewport Culling Bounds
+  const visibleW = canvas.width / zoom;
+  const visibleH = canvas.height / zoom;
+  const viewLeft = head.x - visibleW/2 - 100;
+  const viewRight = head.x + visibleW/2 + 100;
+  const viewTop = head.y - visibleH/2 - 100;
+  const viewBottom = head.y + visibleH/2 + 100;
 
-  // Draw Opponents
-  for (const id in opponents) {
-      const p = opponents[id];
-      drawSnake(p.path, p.color, p.name, p.x, p.y);
+  // Draw Map Border
+  ctx.beginPath();
+  ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
+  ctx.strokeStyle = "#ff3333";
+  ctx.lineWidth = 20;
+  ctx.stroke();
+  ctx.fillStyle = "#161621";
+  ctx.fill();
+
+  // Grid
+  ctx.save();
+  ctx.clip(); 
+  ctx.strokeStyle = "#2a2a35";
+  ctx.lineWidth = 1; 
+  ctx.beginPath();
+  
+  const gridStep = 100;
+  const startX = Math.max(-MAP_RADIUS, Math.floor(viewLeft / gridStep) * gridStep);
+  const endX = Math.min(MAP_RADIUS, Math.ceil(viewRight / gridStep) * gridStep);
+  const startY = Math.max(-MAP_RADIUS, Math.floor(viewTop / gridStep) * gridStep);
+  const endY = Math.min(MAP_RADIUS, Math.ceil(viewBottom / gridStep) * gridStep);
+
+  for (let i = startX; i <= endX; i += gridStep) {
+    ctx.moveTo(i, -MAP_RADIUS); ctx.lineTo(i, MAP_RADIUS);
+  }
+  for (let i = startY; i <= endY; i += gridStep) {
+    ctx.moveTo(-MAP_RADIUS, i); ctx.lineTo(MAP_RADIUS, i);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Food
+  for (const f of food) {
+    if (f.x < viewLeft || f.x > viewRight || f.y < viewTop || f.y > viewBottom) continue;
+    drawFood(ctx, f);
   }
 
-  // Draw Self
-  drawSnake(path, playerColor, playerName, head.x, head.y);
+  // Powerups
+  for (const p of powerups) {
+    if (p.x < viewLeft || p.x > viewRight || p.y < viewTop || p.y > viewBottom) continue;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    const scale = 1 + Math.sin(gameTime * 2) * 0.1;
+    ctx.scale(scale, scale);
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = p.color;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "white";
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowBlur = 0;
+    ctx.fillText(p.label, 0, 0);
+    ctx.restore();
+  }
 
+  // Draw Bots and Player with Layering
+  if (playerIsUnder) {
+      drawPlayerBody(visibleW, visibleH);
+      drawBots(visibleW, visibleH);
+      drawRemotePlayers(visibleW, visibleH);
+  } else {
+      drawBots(visibleW, visibleH);
+      drawRemotePlayers(visibleW, visibleH);
+      drawPlayerBody(visibleW, visibleH);
+  }
+  
   drawMinimap();
-  CTX.restore();
+  ctx.restore();
 }
 
-function drawSnake(snakePath, color, name, headX, headY) {
-    if (!snakePath || snakePath.length === 0) return;
+function drawBots(visibleW, visibleH) {
+    bots.forEach(bot => {
+      drawGenericSnake(bot, visibleW, visibleH);
+  });
+}
 
-    // Body
-    CTX.lineWidth = 22;
-    CTX.lineCap = "round";
-    CTX.lineJoin = "round";
-    CTX.strokeStyle = color;
+function drawRemotePlayers(visibleW, visibleH) {
+    Object.values(remotePlayers).forEach(p => {
+        drawGenericSnake(p, visibleW, visibleH);
+    });
+}
+
+// SHARED DRAW FUNCTION FOR BOTS AND REMOTE PLAYERS
+function drawGenericSnake(bot, visibleW, visibleH) {
+    if (Math.abs(bot.x - head.x) > visibleW && Math.abs(bot.y - head.y) > visibleH) return;
+      
+    // STEP 4A: Distance-based LOD
+    const dxB = bot.x - head.x;
+    const dyB = bot.y - head.y;
+    const distB = Math.hypot(dxB, dyB);
+    // Far bots: draw fewer segments
+    const maxDrawSegments = distB > 2000 ? Math.min(bot.length, 25) :
+                            distB > 1200 ? Math.min(bot.length, 60) :
+                            bot.length;
+
+    const botR = getWormRadius(bot.length);
+    // Safety check for path
+    if (!bot.path) bot.path = [];
     
-    CTX.beginPath();
-    CTX.moveTo(snakePath[0].x, snakePath[0].y);
-    for (let i = 1; i < snakePath.length; i++) {
-        CTX.lineTo(snakePath[i].x, snakePath[i].y);
+    const smoothPath = [...bot.path, {x: bot.x, y: bot.y}];
+    const pointsToDraw = [];
+    let currentDist = 0;
+    let targetDist = SEGMENT_SPACING;
+    
+    for (let j = smoothPath.length - 1; j > 0; j--) {
+      const p1 = smoothPath[j];
+      const p2 = smoothPath[j - 1];
+      const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      while (currentDist + d >= targetDist) {
+        const ratio = (targetDist - currentDist) / d;
+        pointsToDraw.push({
+            x: p1.x + (p2.x - p1.x) * ratio,
+            y: p1.y + (p2.y - p1.y) * ratio
+        });
+        targetDist += SEGMENT_SPACING;
+        if (pointsToDraw.length >= maxDrawSegments) break;
+      }
+      currentDist += d;
+      if (pointsToDraw.length >= maxDrawSegments) break;
     }
-    CTX.lineTo(headX, headY);
-    CTX.stroke();
+    
+    ctx.fillStyle = bot.color;
+    for (let i = pointsToDraw.length - 1; i >= 0; i--) {
+       const p = pointsToDraw[i];
+       ctx.beginPath();
+       ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
+       ctx.fill();
+       
+       // Wormate-style translucent segment shading (LOD: only if close)
+       if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
+    }
+    
+    ctx.fillStyle = bot.color;
+    ctx.beginPath();
+    ctx.arc(bot.x, bot.y, botR * 1.05, 0, Math.PI * 2);
+    ctx.fill();
+    drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
+    
+    // STEP 3A: Draw names only if close
+    if (distB < 900) {
+        ctx.fillStyle = "white";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(bot.name, bot.x, bot.y - 15);
+    }
+}
 
-    // Head
-    CTX.fillStyle = color;
-    CTX.beginPath();
-    CTX.arc(headX, headY, 12, 0, Math.PI*2);
-    CTX.fill();
+function drawPlayerBody(visibleW, visibleH) {
+  if (!isGameOver) {
+      const playerR = getWormRadius(length);
+      ctx.fillStyle = playerColor; 
+      const smoothPath = [...path, {x: head.x, y: head.y}];
+      const pointsToDraw = [];
+      let currentDist = 0;
+      let targetDist = SEGMENT_SPACING;
+      
+      for (let j = smoothPath.length - 1; j > 0; j--) {
+        const p1 = smoothPath[j];
+        const p2 = smoothPath[j - 1];
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        while (currentDist + d >= targetDist) {
+          const ratio = (targetDist - currentDist) / d;
+          const px = p1.x + (p2.x - p1.x) * ratio;
+          const py = p1.y + (p2.y - p1.y) * ratio;
+          pointsToDraw.push({x: px, y: py});
+          targetDist += SEGMENT_SPACING;
+          if (pointsToDraw.length >= length) break;
+        }
+        currentDist += d;
+        if (pointsToDraw.length >= length) break;
+      }
 
-    // Name
-    CTX.fillStyle = "white";
-    CTX.font = "14px Arial";
-    CTX.textAlign = "center";
-    CTX.fillText(name || "Guest", headX, headY - 20);
+      for (let i = pointsToDraw.length - 1; i >= 0; i--) {
+         const p = pointsToDraw[i];
+         ctx.beginPath();
+         ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
+         ctx.fill();
+
+         // Wormate-style translucent segment shading
+         drawSegmentOverlay(ctx, p.x, p.y, playerR);
+      }
+
+      // Head (same color as body, slightly larger)
+      ctx.fillStyle = playerColor;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, playerR * 1.05, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Face (eyes + mouth) like Wormate
+      drawWormateFace(ctx, head.x, head.y, head.angle, playerR);
+  }
+}
+
+function drawSegmentOverlay(ctx, x, y, r) {
+  // Wormate-like subtle shading circle
+  ctx.save();
+  ctx.globalAlpha = 0.22;               // tweak 0.15 - 0.30
+  ctx.fillStyle = "#000";               // dark overlay (works on any body color)
+  ctx.beginPath();
+  // offset slightly backwards so it looks like a scale
+  ctx.arc(x - r * 0.25, y, r * 0.92, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWormateFace(ctx, x, y, angle, r) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  // Eye positions relative to head radius
+  const eyeX = r * 0.35;
+  const eyeY = r * 0.28;
+  const eyeR = r * 0.35;
+
+  // Outer eye (white)
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = Math.max(2, r * 0.12);
+
+  // Left eye
+  ctx.beginPath();
+  ctx.arc(eyeX, -eyeY, eyeR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Right eye
+  ctx.beginPath();
+  ctx.arc(eyeX, eyeY, eyeR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Pupils (look forward)
+  ctx.fillStyle = "black";
+  const pupilR = eyeR * 0.28;
+  ctx.beginPath();
+  ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI * 2);
+  ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mouth (red arc on the "front-right" like Wormate)
+  ctx.strokeStyle = "#e43b3b";
+  ctx.lineWidth = Math.max(2, r * 0.14);
+  ctx.lineCap = "round";
+
+  const mouthX = r * 0.55;
+  const mouthY = 0;
+  const mouthR = r * 0.55;
+
+  ctx.beginPath();
+  // small smile arc
+  ctx.arc(mouthX, mouthY, mouthR, -0.55, 0.55);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawFood(ctx, f) {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.angle + gameTime * 0.1); 
+    ctx.fillStyle = f.color;
+    
+    // Wormate-style candy look
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = Math.max(1, f.r * 0.18);
+
+    // Glow Effect
+    if (f.isDrops && !f.noGlow) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = f.color;
+    }
+
+    if (f.type === 0) { // Donut
+        ctx.beginPath();
+        ctx.arc(0, 0, f.r, 0, Math.PI*2);
+        ctx.arc(0, 0, f.r * 0.4, 0, Math.PI*2, true);
+        ctx.fill();
+        ctx.stroke();
+    } else if (f.type === 1) { // Candy
+        ctx.beginPath();
+        ctx.arc(0, 0, f.r, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, f.r * 0.6, 0, Math.PI*2);
+        ctx.stroke();
+    } else { // Cookie
+        ctx.beginPath();
+        ctx.arc(0, 0, f.r, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.arc(-f.r*0.3, -f.r*0.3, f.r*0.2, 0, Math.PI*2);
+        ctx.arc(f.r*0.3, f.r*0.2, f.r*0.2, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    // Highlight shine
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(-f.r * 0.25, -f.r * 0.25, f.r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
 }
 
 function drawMinimap() {
-    MINI_CTX.clearRect(0,0,150,150);
-    MINI_CTX.fillStyle = "rgba(0,0,0,0.5)";
-    MINI_CTX.fillRect(0,0,150,150);
+    miniCtx.fillStyle = "rgba(20, 20, 30, 0.8)";
+    miniCtx.fillRect(0, 0, 150, 150);
+    
+    // Axis Lines
+    miniCtx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+    miniCtx.lineWidth = 1;
+    miniCtx.beginPath();
+    miniCtx.moveTo(0, 75); miniCtx.lineTo(150, 75); // X
+    miniCtx.moveTo(75, 0); miniCtx.lineTo(75, 150); // Y
+    miniCtx.stroke();
 
     const scale = 150 / (MAP_RADIUS * 2);
+    const centerX = 75;
+    const centerY = 75;
     
-    // Draw opponents on minimap
-    for(const id in opponents) {
-        const op = opponents[id];
-        const mx = 75 + op.x * scale;
-        const my = 75 + op.y * scale;
-        MINI_CTX.fillStyle = op.color || "red";
-        MINI_CTX.beginPath();
-        MINI_CTX.arc(mx, my, 3, 0, Math.PI*2);
-        MINI_CTX.fill();
+    // Draw Bots
+    bots.forEach(bot => {
+        const mx = centerX + bot.x * scale;
+        const my = centerY + bot.y * scale;
+        miniCtx.fillStyle = bot.color;
+        miniCtx.beginPath();
+        miniCtx.arc(mx, my, 2, 0, Math.PI*2);
+        miniCtx.fill();
+    });
+
+    // Draw Remote Players
+    Object.values(remotePlayers).forEach(p => {
+        const mx = centerX + p.x * scale;
+        const my = centerY + p.y * scale;
+        miniCtx.fillStyle = p.color || "#fff";
+        miniCtx.beginPath();
+        miniCtx.arc(mx, my, 2, 0, Math.PI*2);
+        miniCtx.fill();
+    });
+    
+    // Only draw player if alive
+    if (!isGameOver) {
+        const px = centerX + head.x * scale;
+        const py = centerY + head.y * scale;
+        miniCtx.fillStyle = "white";
+        miniCtx.beginPath();
+        miniCtx.arc(px, py, 3, 0, Math.PI*2);
+        miniCtx.fill();
+        miniCtx.strokeStyle = "black";
+        miniCtx.stroke();
     }
-    
-    // Self
-    const px = 75 + head.x * scale;
-    const py = 75 + head.y * scale;
-    MINI_CTX.fillStyle = "white";
-    MINI_CTX.beginPath();
-    MINI_CTX.arc(px, py, 4, 0, Math.PI*2);
-    MINI_CTX.fill();
 }
 
-function updateLeaderboard() {
-    const list = document.getElementById('lb-content');
-    let html = '';
-    // Simply counting players for now
-    let count = 1; // Me
-    for(let id in opponents) count++;
-    document.getElementById('online-count').innerText = `(${count})`;
-
-    // Add Me
-    html += `<div class="lb-row lb-me"><span>${playerName}</span><span>${Math.floor(length*10)}</span></div>`;
-    // Add Others
-    for(let id in opponents) {
-        const p = opponents[id];
-        html += `<div class="lb-row"><span>${p.name}</span><span>${Math.floor(p.length*10)}</span></div>`;
-    }
-    list.innerHTML = html;
+/* ================= UTILS ================= */
+function lerpAngle(a, b, t) {
+  let diff = b - a;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  return a + diff * t;
 }
 
-/* ================= LOOP ================= */
+function getWormRadius(len) {
+  // Wormate-like: newborn is thicker; thickness grows slowly with length
+  const minR = 11;          // newborn thickness (increase/decrease to taste)
+  const maxR = 20;          // very large worm thickness cap
+  const t = Math.min(1, Math.max(0, (len - 40) / 260)); // normalize growth range
+  // smooth growth (ease-out)
+  return minR + (maxR - minR) * (1 - Math.pow(1 - t, 2));
+}
+
+function updateLeaderboardUI() {
+  // Combine bots and remote players for leaderboard
+  const myList = [...bots, ...Object.values(remotePlayers)];
+
+  // ONLINE COUNT (bots + remote + you)
+  const onlineEl = document.getElementById('online-count');
+  if (onlineEl) {
+    // remotePlayers doesn't include us, so we add 1 for ourselves if playing
+    const onlineCount = bots.length + Object.keys(remotePlayers).length + (!isGameOver && isGameRunning ? 1 : 0);
+    onlineEl.innerText = `(${onlineCount} online)`;
+  }
+
+  const myScore = Math.floor(length * 10);
+  myList.push({ name: playerName || "You", score: myScore, isMe: true });
+  myList.sort((a, b) => b.score - a.score);
+  const lbDiv = document.getElementById('lb-content');
+  let html = '';
+  myList.slice(0, 10).forEach((p, index) => {
+    const className = p.isMe ? "lb-row lb-me" : "lb-row";
+    html += `<div class="${className}"><span>#${index+1} ${p.name}</span><span>${p.score}</span></div>`;
+  });
+  lbDiv.innerHTML = html;
+}
+
+/* ================= MAIN LOOP ================= */
 function loop() {
   requestAnimationFrame(loop);
+
   const now = performance.now();
-  const dt = (now - lastTime) / (1000 / 60);
+  let dt = (now - lastTime) / (1000 / 60);
   lastTime = now;
+  if (dt > 10) dt = 1; 
+
+  frameCount++;
+  if (now - lastFpsUpdate >= 1000) {
+    const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+    document.getElementById('fps-box').innerText = "FPS: " + fps;
+    lastFpsUpdate = now;
+    frameCount = 0;
+  }
   
   update(dt);
   draw();
 }
 
-// Start connection check immediately
-connectToServer();
-
+// Start loop but stay in lobby
+loop();
 </script>
 </body>
 </html>
