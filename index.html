@@ -272,8 +272,9 @@ const TURN_SPEED_BOOST = 0.12;
 const TURN_SPEED_SHARP = 0.18; 
 const MASS_LOSS_PER_TICK = 0.03;
 
-const UNDER_RATIO = 0.70;          // 70% of body is "under"/non-collidable (Revised)
-const COLLISION_OVER_RATIO = 1.00; // top layer uses full radius
+// STEP 1: Set UNDER_RATIO to 0.60 for correct thickness-based squeeze
+const UNDER_RATIO = 0.60;          // 60% of width is under / pass-through
+const COLLISION_OVER_RATIO = 1.00; // outer ring is the dangerous layer
 
 /* ================= GAME VARIABLES ================= */
 let isGameRunning = false;
@@ -707,15 +708,51 @@ function getCollisionPath(path, headX, headY, maxLen) {
     return points;
 }
 
+// STEP 2.1: Helper to check if HEAD is technically "under" the body (within inner 60% radius)
+function isHeadUnderEnemy(head, enemyCollPath, enemyLen) {
+  const enemyR = getWormRadius(enemyLen);
+  const underR = enemyR * UNDER_RATIO; // Using 0.60 now
+
+  // check dense near-head part of enemy for under contact
+  const skipTail = Math.min(30, Math.floor(enemyCollPath.length * 0.15));
+
+  for (let k = 0; k < enemyCollPath.length - skipTail; k += 2) {
+    const p = enemyCollPath[k];
+    const dx = head.x - p.x;
+    const dy = head.y - p.y;
+    if (Math.abs(dx) > underR + 2 || Math.abs(dy) > underR + 2) continue;
+    if (Math.hypot(dx, dy) < underR) return true;
+  }
+  return false;
+}
+
+// STEP 5.1: Distance-based neck calculation (smooth)
+function getNeckByDistance(collPathHeadFirst, maxDist) {
+  const neck = [];
+  let dist = 0;
+
+  for (let i = 0; i < collPathHeadFirst.length; i++) {
+    if (i > 0) {
+      dist += Math.hypot(
+        collPathHeadFirst[i].x - collPathHeadFirst[i - 1].x,
+        collPathHeadFirst[i].y - collPathHeadFirst[i - 1].y
+      );
+    }
+    if (dist > maxDist) break;
+    neck.push(collPathHeadFirst[i]);
+  }
+  return neck;
+}
+
 function checkCombat() {
     if (isGameOver || !isGameRunning) return;
-    const killRadiusPlayer = getWormRadius(length) * 2;
+    
+    // Reset under flag for this frame
     playerIsUnder = false;
 
-    // STEP 3A: Make skip amount proportional and smaller for better neck hits
-    // Helper to check standard head-body hits
-    // Returns TRUE if attacker hits victim body
-    const checkHit = (attackerHead, victimPath, victimLen, attackerKillRadius) => {
+    // STEP 3A: Helper to check standard head-body hits
+    // STEP 4.1: Renamed param to attackerHeadRadius and used tighter offset
+    const checkHit = (attackerHead, victimPath, victimLen, attackerHeadRadius) => {
         // victim's body thickness
         const victimR = getWormRadius(victimLen);
 
@@ -723,7 +760,8 @@ function checkCombat() {
         const underR = victimR * UNDER_RATIO;
 
         // "over" deadly zone (top layer) - THINNER DEADLY RING
-        const overR = victimR * COLLISION_OVER_RATIO + attackerKillRadius * 0.08;
+        // STEP 4.2: Tighter offset (0.05) and uses actual head radius
+        const overR = victimR * COLLISION_OVER_RATIO + attackerHeadRadius * 0.05;
 
         const skipTail = Math.min(6, Math.floor(victimPath.length * 0.2));
 
@@ -748,22 +786,33 @@ function checkCombat() {
         return false;
     };
 
-    const getNeckPath = (fullCollisionPath, neckSegments) => {
-        // collision path is ordered from head backwards (because of how getCollisionPath builds it)
-        // so neck is the first N points
-        return fullCollisionPath.slice(0, Math.max(0, neckSegments));
+    // STEP 2.2: Forgiving HS touch check (ignoring under/over rings)
+    // STEP 5.3: Tighter HS radius to avoid mid-body hits
+    const checkHeadshotTouch = (attackerHead, victimNeckPath, victimLen, attackerLen) => {
+        const victimR = getWormRadius(victimLen);
+        const attackerR = getWormRadius(attackerLen);
+        
+        // Tighter distance: 60% of combined radii
+        const hsR = victimR * 0.60 + attackerR * 0.60;
+
+        for (let k = 0; k < victimNeckPath.length; k += 2) { // denser sampling than 3
+            const p = victimNeckPath[k];
+            const dx = attackerHead.x - p.x;
+            const dy = attackerHead.y - p.y;
+            if (Math.abs(dx) > hsR + 4 || Math.abs(dy) > hsR + 4) continue;
+            if (Math.hypot(dx, dy) < hsR) return true;
+        }
+        return false;
     };
 
     // Helper: Head-to-Head Resolution
     // Returns: 0=NoCollision, 1=A wins, 2=B wins, 3=Both die
-    // STEP 1A: Change resolveHeadOn signature to accept collision paths
     const resolveHeadOn = (a, b, aLen, bLen, aColl, bColl) => {
-        const aKillR = getWormRadius(aLen) * 2;
-        const bKillR = getWormRadius(bLen) * 2;
-
-        // Direct head-to-head proximity check (kept)
+        // Direct head-to-head proximity check
         const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        if (dist < Math.max(aKillR, bKillR) && dist > getWormRadius(Math.min(aLen, bLen)) * 0.8) {
+        const minR = Math.min(getWormRadius(aLen), getWormRadius(bLen));
+        
+        if (dist < (minR * 2.2) && dist > (minR * 0.55)) {
             const distA = Math.hypot(a.x, a.y);
             const distB = Math.hypot(b.x, b.y);
 
@@ -776,21 +825,16 @@ function checkCombat() {
         }
 
         // NECK HEADSHOT EXTENSION:
-        // If A head touches B neck -> A wins (HS)
-        // If B head touches A neck -> B wins (HS)
-        // "Neck size" scales a bit with thickness so it feels Wormate-like.
-        const neckPointsA = 10 + Math.floor(getWormRadius(aLen) * 0.9); // ~20-28ish
-        const neckPointsB = 10 + Math.floor(getWormRadius(bLen) * 0.9);
+        // STEP 5.2: Use distance-based neck (~2.2x radius)
+        const neckDistA = getWormRadius(aLen) * 2.2; 
+        const neckDistB = getWormRadius(bLen) * 2.2;
+        
+        const aNeck = getNeckByDistance(aColl, neckDistA);
+        const bNeck = getNeckByDistance(bColl, neckDistB);
 
-        // STEP 1B: Use passed-in cached paths
-        // Removed duplicate getCollisionPath calls here
-
-        const aNeck = getNeckPath(aColl, neckPointsA);
-        const bNeck = getNeckPath(bColl, neckPointsB);
-
-        // Use victimLen to get correct radius
-        const aHitsBNeck = checkHit(a, bNeck, bLen, aKillR);
-        const bHitsANeck = checkHit(b, aNeck, aLen, bKillR);
+        // STEP 2.2: Use forgiving checkHeadshotTouch
+        const aHitsBNeck = checkHeadshotTouch(a, bNeck, bLen, aLen);
+        const bHitsANeck = checkHeadshotTouch(b, aNeck, aLen, bLen);
 
         if (aHitsBNeck && bHitsANeck) return 3; // both clipped neck area same tick
         if (aHitsBNeck) return 1;
@@ -811,23 +855,20 @@ function checkCombat() {
     for (let i = 0; i < bots.length; i++) {
         let b = bots[i];
         
-        // Check "under" status for visual layering
-        const botR = getWormRadius(b.length);
-        const underR = botR * UNDER_RATIO;
-        if (Math.hypot(head.x - b.x, head.y - b.y) < underR) playerIsUnder = true;
+        // STEP 2.2: Check "under" status for visual layering using new helper
+        if (isHeadUnderEnemy(head, botCollPaths[i], b.length)) {
+            playerIsUnder = true;
+        }
 
         // Standard Body Hit: Player hits Bot Body -> Player dies
-        // STEP 1B: Use cached path
+        // STEP 1B: Use cached path and updated checkHit signature
         const botCollisionPath = botCollPaths[i];
-        // Pass victim length (b.length) and just getWormRadius(length) for attacker radius
         if (checkHit(head, botCollisionPath, b.length, getWormRadius(length))) {
             triggerGameOver();
             return;
         }
 
         // Standard Body Hit: Bot hits Player Body -> Bot dies
-        // STEP 1B: Use playerCollPath instead of raw path slice
-        // Pass victim length (length) and just getWormRadius(b.length) for attacker radius
         if (playerCollPath.length > 30 && checkHit(b, playerCollPath, length, getWormRadius(b.length))) {
             killBot(i);
             killCount++; // Body Kill
@@ -836,26 +877,34 @@ function checkCombat() {
         }
 
         // Head-on Check
-        // STEP 1C: Pass cached collision paths
         const res = resolveHeadOn(head, b, length, b.length, playerCollPath, botCollPaths[i]);
         if (res === 1) { 
             killBot(i); 
-
-            // HS ONLY — NO KILL
             hsCount++; 
-
             updateStatsUI(); 
-
             const audio = document.getElementById('hs-audio');
             if (audio) {
                 audio.currentTime = 0;
                 audio.play().catch(() => {});
             }
-
             continue;
         } // Player wins
         else if (res === 2) { triggerGameOver(); return; } // Bot wins
         else if (res === 3) { triggerGameOver(); return; } // Both die
+    }
+
+    // STEP 3: Check Remote Players for "Under" status and collisions (Optional but good for visuals)
+    // Note: We don't do full collision logic for remote players as server handles that authoritative part usually, 
+    // but for visuals we MUST know if we are under them.
+    for (const rp of Object.values(remotePlayers)) {
+        if (!rp || !rp.path) continue;
+        const rpLen = rp.length || 50;
+        const rpColl = getCollisionPath(rp.path, rp.x, rp.y, rpLen - 3);
+
+        if (isHeadUnderEnemy(head, rpColl, rpLen)) {
+            playerIsUnder = true;
+            break;
+        }
     }
 
     // STEP 2: Throttle Bot-vs-Bot checks (run 5 times per second)
@@ -874,9 +923,7 @@ function checkCombat() {
                 let b2 = bots[j];
                 
                 // Body hits
-                // STEP 1B: Use cached path
                 const b2CollisionPath = botCollPaths[j];
-                // Pass victim length (b2.length) and just getWormRadius(b1.length) for attacker radius
                 if (checkHit(b1, b2CollisionPath, b2.length, getWormRadius(b1.length))) {
                     killBot(i);
                     died = true;
@@ -884,7 +931,6 @@ function checkCombat() {
                 }
 
                 // Head hits
-                // STEP 1C: Pass cached collision paths
                 const res = resolveHeadOn(b1, b2, b1.length, b2.length, botCollPaths[i], botCollPaths[j]);
                 if (res === 1) { /* b1 wins */ }
                 else if (res === 2) { killBot(i); died = true; break; }
@@ -1052,6 +1098,14 @@ function drawRemotePlayers(visibleW, visibleH) {
     });
 }
 
+// STEP 1.2: Wormate-style outer shadow helper
+function applyWormShadow(ctx, color, r) {
+  ctx.shadowBlur = r * 1.4;                 // tweak 1.0 - 2.0
+  ctx.shadowColor = "rgba(0,0,0,0.35)";     // wormate-like dark halo
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
 // SHARED DRAW FUNCTION FOR BOTS AND REMOTE PLAYERS
 function drawGenericSnake(bot, visibleW, visibleH) {
     if (Math.abs(bot.x - head.x) > visibleW && Math.abs(bot.y - head.y) > visibleH) return;
@@ -1091,12 +1145,20 @@ function drawGenericSnake(bot, visibleW, visibleH) {
       if (pointsToDraw.length >= maxDrawSegments) break;
     }
     
+    // Shadow Optimization: only for close worms
+    const doShadow = distB < 1400;
+
     ctx.fillStyle = bot.color;
     for (let i = pointsToDraw.length - 1; i >= 0; i--) {
        const p = pointsToDraw[i];
+       
+       // Apply Shadow
+       ctx.save();
+       if (doShadow) applyWormShadow(ctx, bot.color, botR);
        ctx.beginPath();
        ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
        ctx.fill();
+       ctx.restore();
        
        // Wormate-style translucent segment shading (LOD: only if close)
        if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
@@ -1120,6 +1182,11 @@ function drawGenericSnake(bot, visibleW, visibleH) {
 function drawPlayerBody(visibleW, visibleH) {
   if (!isGameOver) {
       const playerR = getWormRadius(length);
+      
+      // STEP 1.3: Visual indication of being "under" (transparency)
+      const underTint = playerIsUnder ? 0.92 : 1.0;
+      ctx.globalAlpha = underTint;
+
       ctx.fillStyle = playerColor; 
       const smoothPath = [...path, {x: head.x, y: head.y}];
       const pointsToDraw = [];
@@ -1144,9 +1211,14 @@ function drawPlayerBody(visibleW, visibleH) {
 
       for (let i = pointsToDraw.length - 1; i >= 0; i--) {
          const p = pointsToDraw[i];
+         
+         // Apply Shadow
+         ctx.save();
+         applyWormShadow(ctx, playerColor, playerR);
          ctx.beginPath();
          ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
          ctx.fill();
+         ctx.restore();
 
          // Wormate-style translucent segment shading
          drawSegmentOverlay(ctx, p.x, p.y, playerR);
@@ -1160,6 +1232,9 @@ function drawPlayerBody(visibleW, visibleH) {
       
       // Face (eyes + mouth) like Wormate
       drawWormateFace(ctx, head.x, head.y, head.angle, playerR);
+
+      // Restore alpha
+      ctx.globalAlpha = 1;
   }
 }
 
