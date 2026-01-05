@@ -206,15 +206,14 @@
 <script>
 
 /* ================= SKIN MANAGER ================= */
-// REPLACE THIS JSON WITH YOUR GALAXY.json CONTENT
-// This is a placeholder that generates a simple purple circle sprite
+// CLEANED UP SKIN JSON
 const DEFAULT_SKIN_JSON = {
   "custom_skin_galaxy": {
     "regionDict": {
       "galaxy_base": { "texture": "galaxy_tex", "x": 0, "y": 0, "w": 64, "h": 64 }
     },
     "textureDict": {
-      // Placeholder Base64 - A purple gradient circle
+      // Base64 - A purple gradient circle
       "galaxy_tex": { 
           "file": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyJpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+/PmQCNrwAAAMaSURBVHja7ZtNsxtFGMfXU09+JbaSvBicqgSDC2cO+Qic+QicOOSMc+HCoUouc+HAAQ4cOFSQKi4c4MAJ4sSvkPjR6/F/2j1pl2Z2Vzszu6v2/M+8O+u1Z0Y/fe/TS7urX375ZQv81+rD9y/2wAdgD/wB9sAHYA/8AfbAB2AP/AH2wAdgD/wB9sAHYA/8AfbAB+D/9sD640+27U9/2rbf/2zb/vynbWfP33zP717/+dft9Mcfb+5n9+F72/bnn27e/8O3X2+Xv3138/7Vz9/f/P/211/c/P/D77/d/M/nH3948z+ff/px2y4u8n238x/3b+7/9s2r3P/F9v7Fxdt79z587+a+b9+8vPne1c/fv3n/5+9f3vz/5+/fs/0/f/fNzb+fvv1m+/TNN27u/fb1q3z/+69e3vz/x69f3vz/x69fs/3ff/ns5v9fPnv65n5//+zJzf+fP/1s8/8XTz7d/P/Fk9z/g4f339679/67N/d9/OD+zfeuHz7I9//84P7N/3/+YP/m/z9/8CDb//P7+zf//vz+/Zv7/fzunZv/P797J9v/8907N///+c6dm/v9dOftt/fuvfXOzb1/vP32zf9/vP12tv/H27dv/v/j7be5/9s3//94e//m3z/e3r+53093b9/8//Pd29n+n+/evvn/z3dvs/0/33375t9P77x1/+1v7r97c+9f99+/+d71/fdz/w/fv3/z/w/fz/b/cP/+zf9/uJ/7f3D/5n4/vffO22/vvfvuzb1/vPfuW9/zuv7n37bTH3/M9v9479383u/e3Pun9999+63333335t6/3n8v3//rvfez/b/efy/f/+u9e/n+X++9m/v99O1Xj7bt8vKfr/h52y4vL/J9t/M3f/338vLif29/8/e3y8uL/739zd/fLi8v8v238zf3u7y8zP1//t62y8vL2f7Ly4t8/6/Ly4v83u/y8nJzv5/uv/fub7998D64e+CD8we27Q9gD3wA9sAfYA98APbAH2APfAD2wB9gD3wA9sAfYA98APbAH2APfAD2wB/gXzwEGAAGa704f7k/fQAAAABJRU5ErkJggg==" 
       }
@@ -236,27 +235,35 @@ class SkinManager {
     }
 
     loadSkinData(json) {
-        for (const [skinName, data] of Object.entries(json)) {
-            const regionDict = data.regionDict;
-            const textureDict = data.textureDict;
-            
-            // Decode and load images
-            for (const [texKey, texData] of Object.entries(textureDict)) {
-                if (!this.loadedImages[texKey]) {
-                    const img = new Image();
-                    img.src = texData.file; 
-                    this.loadedImages[texKey] = img;
+        try {
+            for (const [skinName, data] of Object.entries(json)) {
+                const regionDict = data.regionDict;
+                const textureDict = data.textureDict;
+                
+                // Decode and load images
+                for (const [texKey, texData] of Object.entries(textureDict)) {
+                    if (!this.loadedImages[texKey]) {
+                        const img = new Image();
+                        // Handle potential whitespace/newline issues in base64 strings
+                        if (texData.file && typeof texData.file === 'string') {
+                            img.src = texData.file.trim(); 
+                            img.onerror = () => { console.warn("Failed to load skin texture: " + texKey); };
+                            this.loadedImages[texKey] = img;
+                        }
+                    }
                 }
+                
+                this.skins[skinName] = {
+                    regionDict: regionDict,
+                    base: data.skin.base || [],
+                    glow: data.skin.glow || []
+                };
+                
+                // Auto-select first loaded skin
+                if (!this.currentSkin) this.currentSkin = this.skins[skinName];
             }
-            
-            this.skins[skinName] = {
-                regionDict: regionDict,
-                base: data.skin.base || [],
-                glow: data.skin.glow || []
-            };
-            
-            // Auto-select first loaded skin
-            if (!this.currentSkin) this.currentSkin = this.skins[skinName];
+        } catch (e) {
+            console.error("Skin Loading Error:", e);
         }
     }
 
@@ -272,7 +279,7 @@ class SkinManager {
         if (!region) return false;
         
         const img = this.loadedImages[region.texture];
-        if (!img || !img.complete) return false;
+        if (!img || !img.complete || img.naturalWidth === 0) return false; // Check for valid load
 
         ctx.save();
         ctx.translate(x, y);
@@ -419,6 +426,7 @@ window.addEventListener("resize", resize);
 
 /* ================= CONFIGURATION ================= */
 const SEGMENT_SPACING = 5;
+const PATH_SPACING = 5; // FIXED: Added missing constant
 const MAP_RADIUS = 6000; 
 
 const BASE_SPEED = 2.0; 
@@ -737,6 +745,7 @@ function update(dt) {
     head.y += Math.sin(head.angle) * spd * dt;
 
     const last = path[path.length - 1];
+    // PATH_SPACING IS NOW DEFINED
     if (!last || Math.hypot(head.x - last.x, head.y - last.y) >= PATH_SPACING) {
       path.push({ x: head.x, y: head.y });
     }
