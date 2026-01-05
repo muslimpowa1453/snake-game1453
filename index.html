@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wormate Clone - Online</title>
+<title>Wormate Clone - Optimized</title>
 
 <!-- ========================================== -->
 <!--               STYLE.CSS                    -->
@@ -252,6 +252,8 @@ function connectToServer() {
               } 
               else if (data.type === 'state') {
                   const newRemotePlayers = {};
+                  // OPTIMIZATION: Don't recreate objects if they exist to save GC
+                  // But for simplicity of sync, we swap. The server payload is the bottleneck here.
                   data.players.forEach(p => {
                       if (p.id !== myId) {
                           newRemotePlayers[p.id] = p;
@@ -263,8 +265,6 @@ function connectToServer() {
                   delete remotePlayers[data.id];
               }
               else if (data.type === 'spawn_food') {
-                  // SERVER SIDE LOOT GENERATION
-                  // The server sends an array of food items created from a dead player
                   if (data.food && Array.isArray(data.food)) {
                       const now = Date.now();
                       data.food.forEach(f => {
@@ -275,9 +275,9 @@ function connectToServer() {
                               color: f.color,
                               type: f.type,
                               angle: Math.random() * Math.PI * 2,
-                              spawnTime: now, // Reset time relative to local client
+                              spawnTime: now, 
                               isDrops: true,
-                              noGlow: false, // Make them glow!
+                              noGlow: false,
                               vx: 0, vy: 0 
                           });
                       });
@@ -310,7 +310,6 @@ function handleDisconnection() {
         alert("Connection Lost! Returning to lobby.");
         goHome();
     } else {
-        // If we were loading, go back to lobby
         document.getElementById('loading-overlay').style.display = 'none';
         document.getElementById('lobby').style.display = 'flex';
     }
@@ -318,6 +317,7 @@ function handleDisconnection() {
 
 /* ================= GLOBAL SETUP ================= */
 const canvas = document.getElementById("game");
+// OPTIMIZATION: alpha: false might be faster on some browsers, but we need transparency for UI overlay sometimes. 
 const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true }); 
 const minimapCanvas = document.getElementById("minimap");
 const miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
@@ -375,8 +375,8 @@ let frameCount = 0;
 let lastFpsUpdate = 0;
 let lastBotsVsBotsTime = 0;
 
-// OPTIMIZATION: Reduced Bot count to help frame drops on client
-const BOT_COUNT = 50; 
+// OPTIMIZATION: Reduced Bot count significantly for performance
+const BOT_COUNT = 25; 
 let bots = Array.from({ length: BOT_COUNT }, (_, i) => ({
   name: `Bot_${String(i + 1).padStart(3, '0')}`,
   score: 0,
@@ -406,7 +406,6 @@ window.addEventListener("wheel", e => {
 }, { passive: true });
 
 /* ================= GAME LIFECYCLE ================= */
-// Note: startGame is now handled by socket connection flow
 
 function initGame() {
   food.length = 0;
@@ -489,7 +488,6 @@ function spawnFood(x, y, val, colorOverride) {
   let r = val || (7 + Math.random() * 3);
   const now = Date.now();
   
-  // Food from dead worms (local generation)
   if (x !== undefined && y !== undefined) {
       food.push({
         x: x, y: y,
@@ -505,7 +503,6 @@ function spawnFood(x, y, val, colorOverride) {
       return;
   }
 
-  // Natural food
   const angle = Math.random() * Math.PI * 2;
   const dist = Math.sqrt(Math.random()) * (MAP_RADIUS - 50);
   food.push({
@@ -540,27 +537,39 @@ function spawnPowerup() {
   });
 }
 
+// OPTIMIZATION: Avoid Array spread operator in hot loops
 function getRenderedBodyPoints(path, headX, headY, maxLen) {
-    const smooth = [...path, { x: headX, y: headY }];
+    // Manually add head without creating new array if possible, 
+    // but simplified for readability, just avoided excessive spreads later
+    const smooth = path; // Access directly
+    // Note: head is separate, handled by logic below logic
+    
+    // Virtual head point
+    const h = { x: headX, y: headY };
+    
     const points = [];
     let dist = 0;
     let target = SEGMENT_SPACING;
 
-    for (let i = smooth.length - 1; i > 0; i--) {
-        const a = smooth[i];
-        const b = smooth[i - 1];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
+    // Start from Head -> Backwards
+    let prev = h;
+    
+    // Loop path backwards
+    for (let i = smooth.length - 1; i >= 0; i--) {
+        const curr = smooth[i];
+        const d = Math.hypot(prev.x - curr.x, prev.y - curr.y);
 
         while (dist + d >= target) {
             const t = (target - dist) / d;
             points.push({
-                x: a.x + (b.x - a.x) * t,
-                y: a.y + (b.y - a.y) * t
+                x: prev.x + (curr.x - prev.x) * t,
+                y: prev.y + (curr.y - prev.y) * t
             });
             target += SEGMENT_SPACING;
             if (points.length >= maxLen) return points;
         }
         dist += d;
+        prev = curr;
     }
     return points;
 }
@@ -592,7 +601,6 @@ function explodeWorm(pathArr, skinColor) {
 
 /* ================= UPDATE LOOP ================= */
 function update(dt) {
-  // STRICT CONNECTION CHECK: If disconnected, nothing moves
   if (!connectionActive) return;
   if (isGameOver || !isGameRunning) return;
 
@@ -679,18 +687,15 @@ function update(dt) {
   for (let i = food.length - 1; i >= 0; i--) {
     const f = food[i];
     
-    // Expiration (40s = 40000ms)
     if (f.isDrops && (now - f.spawnTime > 40000)) {
         food.splice(i, 1);
         continue;
     }
 
-    // Collision Player
     if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
     if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
       length += (f.r / 4) * currentMult;
       food.splice(i, 1);
-      // Only replace natural food, not drops
       if (!f.isDrops) spawnFood(); 
     }
   }
@@ -737,25 +742,8 @@ function updateBots(dt) {
 
 /* ================= COMBAT LOGIC ================= */
 function getCollisionPath(path, headX, headY, maxLen) {
-    const smooth = [...path, { x: headX, y: headY }];
-    const points = [];
-    let dist = 0, target = SEGMENT_SPACING;
-
-    for (let i = smooth.length - 1; i > 0; i--) {
-        const a = smooth[i], b = smooth[i - 1];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        while (dist + d >= target) {
-            const t = (target - dist) / d;
-            points.push({
-                x: a.x + (b.x - a.x) * t,
-                y: a.y + (b.y - a.y) * t
-            });
-            target += SEGMENT_SPACING;
-            if (points.length >= maxLen) return points;
-        }
-        dist += d;
-    }
-    return points;
+    // Re-use the optimized point getter
+    return getRenderedBodyPoints(path, headX, headY, maxLen);
 }
 
 function isHeadUnderEnemy(head, enemyCollPath, enemyLen) {
@@ -794,6 +782,9 @@ function checkCombat() {
     
     playerIsUnder = false;
 
+    // Optimization: Cache radii
+    const myR = getWormRadius(length);
+
     const checkHit = (attackerHead, victimPath, victimLen, attackerHeadRadius) => {
         const victimR = getWormRadius(victimLen);
         const underR = victimR * UNDER_RATIO;
@@ -804,7 +795,9 @@ function checkCombat() {
             const p = victimPath[k];
             const dx = attackerHead.x - p.x;
             const dy = attackerHead.y - p.y;
+            // Quick AABB check
             if (Math.abs(dx) > overR + 6 || Math.abs(dy) > overR + 6) continue;
+            
             const d = Math.hypot(dx, dy);
             if (d < underR) continue;
             if (d < overR) return true;
@@ -871,7 +864,7 @@ function checkCombat() {
             playerIsUnder = true;
         }
 
-        if (checkHit(head, botCollPaths[i], b.length, getWormRadius(length))) {
+        if (checkHit(head, botCollPaths[i], b.length, myR)) {
             triggerGameOver();
             return;
         }
@@ -900,7 +893,6 @@ function checkCombat() {
     }
 
     // 2. Player vs Remote Players (Under Check Only)
-    // Server handles collisions authoritative in true setups, but we check visuals here
     for (const rp of Object.values(remotePlayers)) {
         if (!rp || !rp.path) continue;
         const rpLen = rp.length || 50;
@@ -985,7 +977,7 @@ function triggerGameOver() {
 }
 
 function restartGame() {
-    onPlayClick(); // Re-trigger the connection flow
+    onPlayClick(); 
 }
 
 /* ================= DRAWING / RENDERER ================= */
@@ -1009,6 +1001,7 @@ function isPointUnderWorm(x, y, worm) {
 }
 
 function draw() {
+  // Clear with solid color (faster than clearing rect if full screen)
   ctx.fillStyle = "#0b0b12";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
@@ -1071,8 +1064,12 @@ function draw() {
     ctx.translate(p.x, p.y);
     const scale = 1 + Math.sin(gameTime * 2) * 0.1;
     ctx.scale(scale, scale);
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = p.color;
+    // Fake Shadow instead of Blur
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.beginPath();
+    ctx.arc(3, 3, p.r, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(0, 0, p.r, 0, Math.PI * 2);
@@ -1081,7 +1078,6 @@ function draw() {
     ctx.font = "bold 10px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowBlur = 0;
     ctx.fillText(p.label, 0, 0);
     ctx.restore();
   }
@@ -1107,11 +1103,12 @@ function drawRemotePlayers(visibleW, visibleH) {
     });
 }
 
-function applyWormShadow(ctx, color, r) {
-  ctx.shadowBlur = r * 1.4;                 
-  ctx.shadowColor = "rgba(0,0,0,0.35)";     
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
+// OPTIMIZATION: REMOVED shadowBlur completely. Used offset fill.
+function applyFakeShadow(ctx, x, y, r) {
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.beginPath();
+    ctx.arc(x + 2, y + 2, r * 1.2, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 function drawGenericSnake(bot, visibleW, visibleH) {
@@ -1127,44 +1124,33 @@ function drawGenericSnake(bot, visibleW, visibleH) {
     const botR = getWormRadius(bot.length);
     if (!bot.path) bot.path = [];
     
-    const smoothPath = [...bot.path, {x: bot.x, y: bot.y}];
-    const pointsToDraw = [];
-    let currentDist = 0;
-    let targetDist = SEGMENT_SPACING;
+    // OPTIMIZATION: Reuse point logic or inline it
+    const pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
     
-    for (let j = smoothPath.length - 1; j > 0; j--) {
-      const p1 = smoothPath[j];
-      const p2 = smoothPath[j - 1];
-      const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-      while (currentDist + d >= targetDist) {
-        const ratio = (targetDist - currentDist) / d;
-        pointsToDraw.push({
-            x: p1.x + (p2.x - p1.x) * ratio,
-            y: p1.y + (p2.y - p1.y) * ratio
-        });
-        targetDist += SEGMENT_SPACING;
-        if (pointsToDraw.length >= maxDrawSegments) break;
-      }
-      currentDist += d;
-      if (pointsToDraw.length >= maxDrawSegments) break;
+    // Shadow Optimization: Fake shadows drawn in a batch FIRST (underneath)
+    if (distB < 1200) {
+        ctx.fillStyle = "rgba(0,0,0,0.2)";
+        for (let i = pointsToDraw.length - 1; i >= 0; i--) {
+            const p = pointsToDraw[i];
+            ctx.beginPath();
+            ctx.arc(p.x + 3, p.y + 3, botR, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
-    
-    const doShadow = distB < 1400;
 
+    // Draw Body
     ctx.fillStyle = bot.color;
     for (let i = pointsToDraw.length - 1; i >= 0; i--) {
        const p = pointsToDraw[i];
        
-       ctx.save();
-       if (doShadow) applyWormShadow(ctx, bot.color, botR);
        ctx.beginPath();
        ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
        ctx.fill();
-       ctx.restore();
        
        if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
     }
     
+    // Head
     ctx.fillStyle = bot.color;
     ctx.beginPath();
     ctx.arc(bot.x, bot.y, botR * 1.05, 0, Math.PI * 2);
@@ -1185,27 +1171,7 @@ function drawPlayerBody(visibleW, visibleH) {
       const underTint = playerIsUnder ? 0.92 : 1.0;
       ctx.globalAlpha = underTint;
 
-      ctx.fillStyle = playerColor; 
-      const smoothPath = [...path, {x: head.x, y: head.y}];
-      const pointsToDraw = [];
-      let currentDist = 0;
-      let targetDist = SEGMENT_SPACING;
-      
-      for (let j = smoothPath.length - 1; j > 0; j--) {
-        const p1 = smoothPath[j];
-        const p2 = smoothPath[j - 1];
-        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-        while (currentDist + d >= targetDist) {
-          const ratio = (targetDist - currentDist) / d;
-          const px = p1.x + (p2.x - p1.x) * ratio;
-          const py = p1.y + (p2.y - p1.y) * ratio;
-          pointsToDraw.push({x: px, y: py});
-          targetDist += SEGMENT_SPACING;
-          if (pointsToDraw.length >= length) break;
-        }
-        currentDist += d;
-        if (pointsToDraw.length >= length) break;
-      }
+      const pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
 
       const underSegs = [];
       const overSegs = [];
@@ -1216,35 +1182,50 @@ function drawPlayerBody(visibleW, visibleH) {
         const p = pointsToDraw[i];
         let under = false;
         for (const e of enemies) {
-            if (isPointUnderWorm(p.x, p.y, e)) { 
-                under = true; 
-                break; 
+            // Optimization: Simple distance check before expensive poly check
+            if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
+                 if (isPointUnderWorm(p.x, p.y, e)) { 
+                    under = true; 
+                    break; 
+                }
             }
         }
         (under ? underSegs : overSegs).push(p);
       }
 
+      // Draw FAKE shadows for under segments
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      underSegs.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
+          ctx.fill();
+      });
+
+      // Draw Under Segments
+      ctx.fillStyle = playerColor;
       for (let i = underSegs.length - 1; i >= 0; i--) {
         const p = underSegs[i];
-        ctx.save();
-        applyWormShadow(ctx, playerColor, playerR);
         ctx.beginPath();
         ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-        ctx.fillStyle = playerColor;
         ctx.fill();
-        ctx.restore();
         drawSegmentOverlay(ctx, p.x, p.y, playerR);
       }
 
+      // Draw FAKE shadows for over segments
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      overSegs.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
+          ctx.fill();
+      });
+
+      // Draw Over Segments
+      ctx.fillStyle = playerColor;
       for (let i = overSegs.length - 1; i >= 0; i--) {
         const p = overSegs[i];
-        ctx.save();
-        applyWormShadow(ctx, playerColor, playerR);
         ctx.beginPath();
         ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-        ctx.fillStyle = playerColor;
         ctx.fill();
-        ctx.restore();
         drawSegmentOverlay(ctx, p.x, p.y, playerR);
       }
 
@@ -1258,14 +1239,14 @@ function drawPlayerBody(visibleW, visibleH) {
   }
 }
 
+// OPTIMIZATION: Simplified overlay
 function drawSegmentOverlay(ctx, x, y, r) {
-  ctx.save();
-  ctx.globalAlpha = 0.22;             
-  ctx.fillStyle = "#000";             
+  // Use a simple arc, no save/restore if possible, but color change requires it
+  // Actually we can batch these if we were smarter, but this is fine for now
+  ctx.fillStyle = "rgba(0,0,0,0.2)"; 
   ctx.beginPath();
   ctx.arc(x - r * 0.25, y, r * 0.92, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 }
 
 function drawWormateFace(ctx, x, y, angle, r) {
@@ -1322,9 +1303,21 @@ function drawFood(ctx, f) {
     ctx.strokeStyle = "rgba(0,0,0,0.25)";
     ctx.lineWidth = Math.max(1, f.r * 0.18);
 
+    // OPTIMIZATION: Removed shadowBlur on food too
+    // Draw fake shadow
     if (f.isDrops && !f.noGlow) {
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = f.color;
+         ctx.save();
+         ctx.translate(3,3);
+         ctx.fillStyle = "rgba(0,0,0,0.3)";
+         ctx.beginPath();
+         if (f.type === 0) { 
+             ctx.arc(0, 0, f.r, 0, Math.PI*2);
+             ctx.arc(0, 0, f.r * 0.4, 0, Math.PI*2, true);
+         } else {
+             ctx.arc(0, 0, f.r, 0, Math.PI*2);
+         }
+         ctx.fill();
+         ctx.restore();
     }
 
     if (f.type === 0) { 
