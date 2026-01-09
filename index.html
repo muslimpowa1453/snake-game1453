@@ -1,19 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Wormate Private</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Wormate Clone</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-    <canvas id="game"></canvas>
-
-    <div id="leaderboard"></div>
-    <canvas id="minimap"></canvas>
-
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div id="start-screen">
+                <input type="text" id="nick" placeholder="Nickname" maxlength="10">
+                <button id="play-btn">PLAY</button>
+            </div>
+            <div id="hud" style="display:none;">
+                <div id="score">Mass: 10</div>
+                <div id="leaderboard"></div>
+                <div id="kill-feed"></div>
+                <div id="mobile-boost" class="mobile-only">BOOST</div>
+            </div>
+            <div id="death-screen" style="display:none;">
+                <h1>GAME OVER</h1>
+                <button id="restart-btn">PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+    <script src="messages.js"></script>
+    <script src="vendor.js"></script>
     <script src="game.js"></script>
 </body>
-
 </html>
