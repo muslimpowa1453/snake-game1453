@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Ultimate</title>
+    <title>Wormate Clone - Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -42,7 +42,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* DISCONNECT / GAME OVER */
-        #overlay-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
+        #overlay-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
         .menu-btn { padding: 15px 40px; font-size: 24px; color: white; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; transition: transform 0.2s; }
         .btn-green { background: #00cc66; }
         .btn-blue { background: #3366ff; }
@@ -56,7 +56,7 @@
     <!-- LOADING -->
     <div id="loading-screen">
         <div class="spinner"></div>
-        <h2>Connecting to Server...</h2>
+        <h2 style="color:white; margin-top:20px;">Connecting to Server...</h2>
     </div>
 
     <!-- LOBBY -->
@@ -97,6 +97,7 @@
     <script>
         // --- CONFIG ---
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
+
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d", { alpha: false }); // Optimize
         const miniCanvas = document.getElementById("minimap");
@@ -107,13 +108,12 @@
         let myId = null;
         let isGameRunning = false;
         let startTime = 0;
-        let gameTime = 0; // Play time in seconds
+        let gameTime = 0; 
 
-        // Zoom
         let zoom = 1.0;
         
         let serverState = { players: {}, bots: [], food: [] };
-        // Smoothed entities (Client-side prediction & interpolation)
+        // Smoothed entities
         let entities = {}; 
 
         let mouse = { x: 0, y: 0 };
@@ -146,9 +146,9 @@
             if (zoom > 2.0) zoom = 2.0;
         }, { passive: true });
 
-        // --- SKIN SYSTEM (Placeholder for your JSON) ---
+        // --- SKIN SYSTEM (Placeholder) ---
         const skinImage = new Image();
-        // Using a generated texture for demo to ensure it works without external assets
+        // Generates a texture on the fly so no broken images
         skinImage.src = createDefaultSkinTexture(); 
 
         function createDefaultSkinTexture() {
@@ -161,7 +161,9 @@
             grad.addColorStop(0, '#ff99cc');
             grad.addColorStop(1, '#660099');
             cx.fillStyle = grad;
-            cx.beginPath(); cx.arc(32,32,30,0,Math.PI*2); cx.fill();
+            cx.beginPath(); 
+            cx.arc(32,32,30,0,Math.PI*2); 
+            cx.fill();
             
             // Spots
             cx.fillStyle = 'rgba(255,255,255,0.3)';
@@ -174,10 +176,12 @@
         }
 
         // --- CONNECTION ---
+        
+        // FIX: This function name now matches the onclick
         function attemptConnect() {
             const name = document.getElementById("nickname-input").value || "Guest";
-            document.getElementById("lobby").style.display = "none";
-            document.getElementById("loading-screen").style.display = "flex";
+            document.getElementById("lobby").style.display = "none"; // Hide Lobby
+            document.getElementById("loading-screen").style.display = "flex"; // Show Loading
             
             connect(name);
         }
@@ -188,6 +192,8 @@
                 
                 ws.onopen = () => { 
                     console.log("Connected");
+                    document.getElementById("loading-screen").style.display = "none"; // Hide Loading
+                    document.getElementById("ui-layer").style.display = "block"; // Show Game
                 };
                 
                 ws.onmessage = (event) => {
@@ -207,7 +213,8 @@
                 setInterval(sendInput, 1000/30);
 
             } catch(e) {
-                alert("Connection failed");
+                console.error(e);
+                showOverlay("ERROR", "Failed to initialize connection.");
                 goHome();
             }
         }
@@ -229,8 +236,11 @@
         function handleMessage(data) {
             if (data.type === 'init') {
                 myId = data.id;
+                // Ensure UI is correct state
                 document.getElementById("loading-screen").style.display = "none";
                 document.getElementById("ui-layer").style.display = "block";
+                document.getElementById("overlay-screen").style.display = "none";
+                
                 isGameRunning = true;
                 startTime = Date.now();
                 loop();
@@ -248,20 +258,20 @@
             }
         }
 
-        // --- INTERPOLATION & PREDICTION ---
+        // --- INTERPOLATION ---
         function updateLocalEntities() {
             serverState.players.forEach(p => {
                 if (!entities[p.id]) {
                     entities[p.id] = { 
                         ...p, 
                         localX: p.x, localY: p.y, localA: p.a,
-                        // Track last pos for velocity calc
                         lastX: p.x, lastY: p.y
                     };
                 } else {
                     const ent = entities[p.id];
                     // LERP: Smooth movement between last known pos and current server pos
                     const lerp = 0.2; 
+                    
                     ent.localX += (p.x - ent.localX) * lerp;
                     ent.localY += (p.y - ent.localY) * lerp;
                     ent.localA += shortestAngle(ent.localA, p.a) * lerp;
@@ -273,6 +283,8 @@
                     ent.kills = p.k;
                     ent.color = p.c;
                     ent.name = p.n;
+                    ent.lastX = p.x;
+                    ent.lastY = p.y;
                 }
             });
 
@@ -290,6 +302,8 @@
                     ent.path = b.p;
                     ent.color = b.c;
                     ent.name = b.n;
+                    ent.lastX = b.x;
+                    ent.lastY = b.y;
                 }
             });
         }
@@ -312,12 +326,8 @@
         }
         
         function restartGame() {
-            if(ws && ws.readyState === WebSocket.OPEN) {
-                 // Server handles respawn usually, but here we reload for simplicity
-                 location.reload();
-            } else {
-                location.reload();
-            }
+            // Reload page to re-init
+            location.reload();
         }
 
         // --- RENDERER ---
@@ -340,13 +350,13 @@
             // GRID & BORDER
             drawGrid(camX, camY);
             drawFood();
-            drawPowerups();
 
             // Draw Snakes
             // Draw others first
             for (const id in entities) {
                 if (id !== myId) drawSnake(entities[id]);
             }
+            // Draw me
             drawSnake(me, true);
 
             ctx.restore();
@@ -358,7 +368,7 @@
             ctx.lineWidth = 2;
             ctx.beginPath();
             const size = 100;
-            const range = 1500 / zoom; // Draw more grid if zoomed out
+            const range = 1500 / zoom; 
             const startX = Math.floor((cx - range) / size) * size;
             const endX = Math.floor((cx + range) / size) * size;
             const startY = Math.floor((cy - range) / size) * size;
@@ -383,7 +393,6 @@
         function drawFood() {
             const me = entities[myId];
             if(!me) return;
-            // Culling
             const range = 1500 / zoom;
             
             for (const f of serverState.food) {
@@ -401,16 +410,6 @@
             }
         }
 
-        function drawPowerups() {
-            const me = entities[myId];
-            if(!me) return;
-            for (const p of serverState.powerups || []) { // Note: Server needs to send powerups in 'state' or we manage locally
-                // Since current server code doesn't send powerups in state, we skip drawing them for now 
-                // or assume they are in food array with specific type
-                // For this demo, we'll assume they are handled by the server logic or simplified
-            })
-        }
-
         function drawSnake(s, isMe) {
             if (!s.path) return;
             const radius = getRadius(s.length);
@@ -421,7 +420,6 @@
             const speed = Math.hypot(dx, dy);
             
             // Squeeze Factor: stretch in direction of movement, compress sideways
-            // Simplified: Stretch X if horizontal, Y if vertical
             const angle = s.localA;
             const stretch = 1 + (speed * 0.04);
             const squash = 1 / stretch;
@@ -493,7 +491,6 @@
         function drawFace(x, y, angle, r) {
             ctx.save();
             // Face is already rotated by parent, but we ensure it looks "towards center/mouse"
-            // Actually Wormate eyes rotate separately slightly based on mouse
             // Here we just draw static relative to head
             
             const eyeX = r * 0.3;
