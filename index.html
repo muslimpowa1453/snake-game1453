@@ -4,42 +4,33 @@
     <meta charset="UTF-8">
     <title>Wormate Clone - Server Authoritative</title>
     <style>
-        /* Base Reset */
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
 
-        /* UI Layer */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
 
-        /* Minimap */
         #minimap-container { position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.5); border-radius: 50%; border: 3px solid #333; overflow: hidden; }
         #minimap { width: 100%; height: 100%; }
 
-        /* Stats */
         #stats-ui { position: absolute; top: 180px; left: 20px; color: white; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.4); padding: 5px 10px; border-radius: 8px; }
         #stats-ui span { color: #ffd700; margin-left: 5px; }
 
-        /* Status Box */
         #status-box { position: absolute; top: 220px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
         .buff { background: rgba(0,0,0,0.6); color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; border-left: 5px solid; display: none; align-items: center; }
         
-        /* Leaderboard */
         #leaderboard { position: absolute; top: 20px; right: 20px; width: 200px; background: rgba(0,0,0,0.6); color: white; padding: 15px; border-radius: 10px; }
         #leaderboard h3 { margin: 0 0 10px 0; text-align: center; color: #ffd700; }
         .lb-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
         .lb-me { color: #00ff00; font-weight: bold; }
 
-        /* Clock */
         #clock-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; }
 
-        /* Game Over */
         #game-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
         .menu-btn { padding: 15px 40px; font-size: 24px; color: white; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; transition: transform 0.2s; }
         .btn-green { background: #00cc66; }
         .btn-blue { background: #3366ff; }
         .menu-btn:hover { transform: scale(1.1); }
 
-        /* Lobby */
         #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11,11,18,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; }
         #lobby h1 { font-size: 60px; color: #ffd700; margin-bottom: 20px; text-shadow: 0 0 20px #ff9900; }
         #nickname-input { padding: 15px; border-radius: 30px; border: 2px solid #444; background: #222; color: white; font-size: 20px; text-align: center; margin-bottom: 20px; outline: none; width: 250px; }
@@ -49,7 +40,6 @@
 
     <canvas id="game"></canvas>
 
-    <!-- LOBBY -->
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
@@ -57,7 +47,6 @@
         <div id="status-msg" style="color:white; margin-top:10px;"></div>
     </div>
 
-    <!-- UI -->
     <div id="ui-layer">
         <div id="minimap-container"><canvas id="minimap"></canvas></div>
         <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
@@ -77,7 +66,6 @@
         <div id="clock-display">00:00</div>
     </div>
 
-    <!-- GAME OVER -->
     <div id="game-over">
         <h1 style="font-size:50px; color:#ff3333;">GAME OVER</h1>
         <p style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
@@ -85,11 +73,10 @@
     </div>
 
     <script>
-        // --- CONFIG ---
-        const SERVER_URL = "ws://localhost:10000"; // Replace with your Render URL
-        // const SERVER_URL = "wss://snake-server-3bnw.onrender.com"; 
+        const SERVER_URL = "ws://localhost:10000"; 
+        // For Render deployment, change localhost to your wss url
+        // const SERVER_URL = "wss://your-app-name.onrender.com"; 
 
-        // --- ENGINE ---
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
         const miniCanvas = document.getElementById("minimap");
@@ -98,18 +85,12 @@
         let ws;
         let myId = null;
         let isGameRunning = false;
-        let lastTime = 0;
         
-        // Server State (Interpolation Targets)
         let serverState = { players: {}, bots: [], food: [] };
-        
-        // Client Input State
+        let entities = {}; 
+
         let mouse = { x: 0, y: 0 };
         let boosting = false;
-
-        // Local Entities (For Interpolation)
-        // We keep a local copy of entities to render smooth frames between server ticks
-        let entities = {}; 
 
         function resize() {
             canvas.width = window.innerWidth;
@@ -120,37 +101,32 @@
         window.addEventListener("resize", resize);
         resize();
 
-        // --- INPUT ---
         window.addEventListener("mousemove", e => {
             mouse.x = e.clientX;
             mouse.y = e.clientY;
         });
         window.addEventListener("mousedown", () => boosting = true);
         window.addEventListener("mouseup", () => boosting = false);
-        window.addEventListener("keydown", e => { if(e.code === "Space") boosting = true; });
-        window.addEventListener("keyup", e => { if(e.code === "Space") boosting = false; });
 
-        // --- NETWORK ---
         function connect() {
             const name = document.getElementById("nickname-input").value || "Guest";
             document.getElementById("lobby").style.display = "none";
             
             try {
                 ws = new WebSocket(SERVER_URL);
-                ws.onopen = () => {
-                    console.log("Connected");
-                };
+                ws.onopen = () => { console.log("Connected"); };
+                
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     handleMessage(data);
                 };
+                
                 ws.onclose = () => {
                     alert("Disconnected from server");
                     location.reload();
                 };
                 
-                // Start sending inputs loop
-                setInterval(sendInput, 1000/30); // 30 inputs per second
+                setInterval(sendInput, 1000/30);
 
             } catch(e) {
                 alert("Connection failed");
@@ -160,8 +136,6 @@
 
         function sendInput() {
             if (!ws || ws.readyState !== WebSocket.OPEN || !myId) return;
-            
-            // Calculate angle relative to center of screen
             const dx = mouse.x - canvas.width/2;
             const dy = mouse.y - canvas.height/2;
             const angle = Math.atan2(dy, dx);
@@ -170,7 +144,7 @@
                 type: 'input',
                 angle: angle,
                 boost: boosting,
-                name: myId ? entities[myId].name : "" // Send name only once or periodically
+                name: entities[myId] ? entities[myId].name : "" 
             }));
         }
 
@@ -179,16 +153,16 @@
                 myId = data.id;
                 document.getElementById("ui-layer").style.display = "block";
                 isGameRunning = true;
-                // Init local entity
+                
+                const name = document.getElementById("nickname-input").value;
                 entities[data.id] = { 
                     ...data, 
                     localX: 0, localY: 0, localA: 0, 
-                    name: document.getElementById("nickname-input").value 
+                    name: name 
                 };
                 loop();
             }
             else if (data.type === 'state') {
-                // Update Server State Snapshot
                 serverState = data;
                 updateLocalEntities();
             }
@@ -196,41 +170,34 @@
                 if (data.id === myId) {
                     triggerGameOver();
                 } else {
-                    // Just remove from local view
                     delete entities[data.id];
                 }
             }
         }
 
-        // --- INTERPOLATION & LOGIC ---
-
         function updateLocalEntities() {
-            // 1. Process Players
+            // Interpolate Players
             serverState.players.forEach(p => {
                 if (!entities[p.id]) {
-                    entities[p.id] = { ...p }; // Spawn
+                    entities[p.id] = { ...p };
                 } else {
-                    // Interpolate (Simple approach: Move towards target)
                     const ent = entities[p.id];
-                    // Lerp factor (0.2 = smooth but follows fast)
                     const lerp = 0.2; 
                     
                     ent.localX = ent.localX + (p.x - ent.localX) * lerp;
                     ent.localY = ent.localY + (p.y - ent.localY) * lerp;
                     ent.localA = ent.localA + shortestAngle(ent.localA, p.a) * lerp;
                     
-                    // Update other properties directly
                     ent.length = p.l;
                     ent.path = p.p;
                     ent.buffs = p.b;
                     ent.kills = p.k;
-                    ent.hs = p.hs;
                     ent.color = p.c;
                     ent.name = p.n;
                 }
             });
 
-            // 2. Process Bots (Bots don't need interpolation as much, they snap more, but let's treat them same)
+            // Interpolate Bots
             serverState.bots.forEach(b => {
                 if (!entities[b.id]) {
                     entities[b.id] = { ...b };
@@ -260,40 +227,27 @@
             document.getElementById("final-score").innerText = Math.floor(me ? me.length : 0);
             ws.close();
         }
-
-        // --- RENDERER ---
         
         function draw() {
-            // Background
             ctx.fillStyle = "#0b0b12";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if (!myId || !entities[myId]) return;
 
             const me = entities[myId];
-            const camX = me.localX || me.x || 0; // Fallback to server pos if not init
+            const camX = me.localX || me.x || 0; 
             const camY = me.localY || me.y || 0;
-            const camA = me.localA || me.a || 0;
 
-            // Camera transform
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
-            // Zoom based on length
             const zoom = Math.max(0.3, 1 - (me.length / 5000));
             ctx.scale(zoom, zoom);
             ctx.translate(-camX, -camY);
 
-            // Grid
             drawGrid(camX, camY);
-
-            // Food
             drawFood();
 
-            // Powerups (Mocking them as food for now, or implement drawPowerup)
-            // Server sends food array.
-
-            // Snakes
-            // Draw other snakes first
+            // Draw other snakes
             for (const id in entities) {
                 if (id !== myId) drawSnake(entities[id]);
             }
@@ -301,7 +255,6 @@
             drawSnake(me, true);
 
             ctx.restore();
-
             drawUI(me);
         }
 
@@ -311,8 +264,6 @@
             ctx.beginPath();
             const size = 100;
             const range = 1000;
-            
-            // Simple grid around camera
             const startX = Math.floor((cx - range) / size) * size;
             const endX = Math.floor((cx + range) / size) * size;
             const startY = Math.floor((cy - range) / size) * size;
@@ -326,7 +277,6 @@
             }
             ctx.stroke();
 
-            // Map Border
             ctx.beginPath();
             ctx.arc(0,0,6000,0,Math.PI*2);
             ctx.strokeStyle = "#333";
@@ -335,14 +285,10 @@
         }
 
         function drawFood() {
-            // Optimization: Culling
             const me = entities[myId];
             if(!me) return;
-            
             for (const f of serverState.food) {
-                // Simple cull
-                if (Math.abs(f.x - me.localX) > canvas.width && Math.abs(f.y - me.localY) > canvas.height) continue;
-
+                if (Math.abs(f.x - me.localX) > 1500 && Math.abs(f.y - me.localY) > 1500) continue;
                 ctx.fillStyle = f.color;
                 ctx.beginPath();
                 ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
@@ -352,23 +298,16 @@
 
         function drawSnake(s, isMe) {
             if (!s.path) return;
-            
             const radius = getRadius(s.length);
-            const spacing = 5; // Must match server
-            
-            // Draw Body
             ctx.fillStyle = s.color;
             
-            // Draw path segments
-            // We iterate backwards from head to tail
-            for (let i = s.path.length - 1; i >= 0; i-=2) { // Skip some for performance
+            for (let i = s.path.length - 1; i >= 0; i-=2) { 
                 const p = s.path[i];
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
                 ctx.fill();
             }
 
-            // Draw Head
             const headX = s.localX || s.x;
             const headY = s.localY || s.y;
             const headA = s.localA || s.a;
@@ -378,10 +317,8 @@
             ctx.arc(headX, headY, radius, 0, Math.PI*2);
             ctx.fill();
 
-            // Eyes
             drawFace(headX, headY, headA, radius);
 
-            // Name
             if (!isMe) {
                 ctx.fillStyle = "white";
                 ctx.font = "12px Arial";
@@ -394,28 +331,23 @@
             ctx.save();
             ctx.translate(x, y);
             ctx.rotate(angle);
-            
             ctx.fillStyle = "white";
             ctx.beginPath();
-            ctx.arc(r*0.3, -r*0.3, r*0.35, 0, Math.PI*2); // Left
-            ctx.arc(r*0.3, r*0.3, r*0.35, 0, Math.PI*2);  // Right
+            ctx.arc(r*0.3, -r*0.3, r*0.35, 0, Math.PI*2); 
+            ctx.arc(r*0.3, r*0.3, r*0.35, 0, Math.PI*2);  
             ctx.fill();
-
             ctx.fillStyle = "black";
             ctx.beginPath();
             ctx.arc(r*0.35, -r*0.3, r*0.1, 0, Math.PI*2);
             ctx.arc(r*0.35, r*0.3, r*0.1, 0, Math.PI*2);
             ctx.fill();
-
             ctx.restore();
         }
 
         function drawUI(me) {
-            // Stats
             document.getElementById("score-val").innerText = Math.floor(me.length * 10);
             document.getElementById("kill-val").innerText = me.kills || 0;
             
-            // Buffs
             const now = Date.now();
             const buffs = me.buffs || {};
             toggleBuff("buff-x2", buffs.x2, now);
@@ -424,24 +356,19 @@
             toggleBuff("buff-ae", buffs.ae, now);
             toggleBuff("buff-spd", buffs.spd, now);
 
-            // Minimap
             miniCtx.fillStyle = "rgba(0,0,0,0.8)";
             miniCtx.fillRect(0,0,150,150);
-            
-            // Draw dots for everyone
             for(const id in entities) {
                 const e = entities[id];
                 if(!e.localX) continue;
                 const mx = 75 + (e.localX / 6000) * 75;
                 const my = 75 + (e.localY / 6000) * 75;
-                
                 miniCtx.fillStyle = (id === myId) ? "white" : e.color;
                 miniCtx.beginPath();
                 miniCtx.arc(mx, my, id === myId ? 3 : 2, 0, Math.PI*2);
                 miniCtx.fill();
             }
 
-            // Leaderboard
             const list = Object.values(entities).sort((a,b) => b.length - a.length).slice(0,10);
             let html = "";
             list.forEach((p, i) => {
@@ -450,7 +377,6 @@
             });
             document.getElementById("lb-content").innerHTML = html;
 
-            // Time
             const d = new Date();
             document.getElementById("clock-display").innerText = 
                 d.getHours().toString().padStart(2,'0') + ":" + d.getMinutes().toString().padStart(2,'0');
@@ -473,7 +399,6 @@
             requestAnimationFrame(loop);
             draw();
         }
-
     </script>
 </body>
 </html>
