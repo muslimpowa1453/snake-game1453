@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Restored</title>
+    <title>Wormate Clone - Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -66,55 +66,37 @@
         <button class="menu-btn btn-green" onclick="connect()">PLAY</button>
     </div>
 
-    <!-- UI LAYER -->
+    <!-- GAME UI -->
     <div id="ui-layer">
-        <!-- Minimap -->
-        <div id="minimap-container">
-            <canvas id="minimap"></canvas>
-        </div>
-
-        <!-- Stats UI -->
-        <div id="stats-ui">
-            Kills: <span id="kill-count">0</span> | HS: <span id="hs-count">0</span>
-        </div>
-
-        <!-- Status Box -->
+        <div id="minimap-container"><canvas id="minimap"></canvas></div>
+        <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
+        
         <div id="status-box">
-            <div id="buff-x2" class="buff" style="border-color: #ff9900;"><span>2x Score</span> <span id="time-x2">0s</span>
-            </div>
-            <div id="buff-x5" class="buff" style="border-color: #ff3300;"><span>5x Score</span> <span id="time-x5">0s</span>
-            </div>
-            <div id="buff-x10" class="buff" style="border-color: #ff0066;"><span>10x Score</span> <span
-                id="time-x10">0s</span></div>
-            <div id="buff-ae" class="buff" style="border-color: #00ffcc;"><span>Turn (ae)</span> <span id="time-ae">0s</span>
-            </div>
-            <div id="buff-spd" class="buff" style="border-color: #aa00ff;"><span>Speed</span> <span id="time-spd">0s</span>
-            </div>
+            <div id="buff-x2" class="buff" style="border-color:#ff9900">2x SCORE</div>
+            <div id="buff-x5" class="buff" style="border-color:#ff3300">5x SCORE</div>
+            <div id="buff-x10" class="buff" style="border-color:#ff0066">10x SCORE</div>
+            <div id="buff-ae" class="buff" style="border-color:#00ffcc">CUTTING EDGE</div>
+            <div id="buff-spd" class="buff" style="border-color:#aa00ff">SPEED</div>
         </div>
 
         <div id="leaderboard">
-            <h3>Leaderboard <span id="online-count">(0 online)</span></h3>
+            <h3>Leaderboard</h3>
             <div id="lb-content"></div>
         </div>
         <div id="clock-display">00:00</div>
     </div>
 
-    <!-- GAME OVER SCREEN -->
+    <!-- OVERLAY (Disconnect/Game Over) -->
     <div id="game-over">
-        <h1>GAME OVER</h1>
-        <p style="font-size: 24px; margin-bottom: 30px;">Score: <span id="final-score" style="color: #ffd700;">0</span></p>
-        <div class="btn-group">
-            <button class="menu-btn btn-blue" onclick="goHome()">Home</button>
-            <button class="menu-btn btn-green" onclick="restartGame()">Play Again</button>
-        </div>
+        <h1 id="overlay-title" style="font-size:50px; color:#ff3333;">GAME OVER</h1>
+        <p id="overlay-msg" style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
+        <button class="menu-btn btn-blue" onclick="goHome()">GO HOME</button>
+        <button class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
     </div>
 
-    <!-- ========================================== -->
-    <!--               GAME.JS                      -->
-    <!-- ========================================== -->
     <script>
-
         // ================= SERVER CONNECTION =================
+        // REPLACE WITH YOUR RENDER URL
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
 
         let ws = null;
@@ -123,19 +105,32 @@
         let connectionActive = false;
 
         function connect() {
-            const input = document.getElementById('nickname-input');
+            // FIX: Correct ID matching HTML
+            const loadingScreen = document.getElementById("loading-screen");
+            const lobby = document.getElementById("lobby");
+            const input = document.getElementById("nickname-input");
+            
+            if (!loadingScreen || !lobby || !input) {
+                console.error("HTML Elements missing");
+                return;
+            }
+
             playerName = input.value.trim() || "Player";
+            lobby.style.display = "none";
+            loadingScreen.style.display = "flex";
 
-            document.getElementById('lobby').style.display = 'none';
-            document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-text').innerText = "Connecting...";
+            connectToServer();
+        }
 
+        function connectToServer() {
             try {
                 ws = new WebSocket(SERVER_URL);
 
                 ws.onopen = () => {
                     console.log("Connected to Game Server");
                     connectionActive = true;
+                    document.getElementById("loading-screen").style.display = "none";
+                    document.getElementById("ui-layer").style.display = "block";
                 };
 
                 ws.onmessage = (event) => {
@@ -144,15 +139,18 @@
 
                         if (data.type === 'init') {
                             myId = data.selfId;
-                            document.getElementById('loading-screen').style.display = 'none';
-                            document.getElementById('ui-layer').style.display = 'block';
+                            document.getElementById("loading-screen").style.display = "none";
+                            document.getElementById("ui-layer").style.display = "block";
                             initGame();
                         }
                         else if (data.type === 'update') {
-                            // Update remote player
-                            if (data.id !== myId) {
-                                remotePlayers[data.id] = data;
-                            }
+                            const newRemotePlayers = {};
+                            data.players.forEach(p => {
+                                if (p.id !== myId) {
+                                    newRemotePlayers[p.id] = p;
+                                }
+                            });
+                            remotePlayers = newRemotePlayers;
                         }
                         else if (data.type === 'remove') {
                             delete remotePlayers[data.id];
@@ -206,8 +204,8 @@
                 alert("Connection Lost! Returning to lobby.");
                 goHome();
             } else {
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('lobby').style.display = 'flex';
+                document.getElementById("loading-screen").style.display = "none";
+                document.getElementById("lobby").style.display = "flex";
             }
         }
 
@@ -553,17 +551,17 @@
             const maxPath = length * SEGMENT_SPACING + 150;
             if (path.length > maxPath) path.splice(0, path.length - maxPath);
 
-            // Send Data to Server (Relay Mode)
+            // Send Data to Server
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Throttle sending to every 50ms (20 times a sec) to save bandwidth
-                if (now % 50 < 17) { // Approx 20fps sending
+                // Throttle to 20Hz for bandwidth
+                if (now % 50 < 17) {
                     const payload = {
                         type: 'update',
                         x: head.x,
                         y: head.y,
                         angle: head.angle,
                         length: length,
-                        path: path, // Send path for others to see
+                        path: path, // Send full path
                         name: playerName,
                         color: playerColor
                     };
@@ -997,9 +995,8 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false; // Skin logic removed for simplicity
+            const hasSkin = false; // Use skin for bots too
 
-            // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
