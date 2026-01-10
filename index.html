@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Network Fixed</title>
+    <title>Wormate Clone - Scope Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -66,7 +66,7 @@
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-        <button class="menu-btn btn-green" onclick="connect()">PLAY</button>
+        <button class="menu-btn btn-green" onclick="attemptConnect()">PLAY</button>
     </div>
 
     <!-- GAME UI -->
@@ -75,11 +75,11 @@
         <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
         
         <div id="status-box">
-            <div id="buff-x2" class="buff" style="border-color: #ff9900">2x SCORE</div>
-            <div id="buff-x5" class="buff" style="border-color: #ff3300">5x SCORE</div>
-            <div id="buff-x10" class="buff" style="border-color: #ff0066">10x SCORE</div>
-            <div id="buff-ae" class="buff" style="border-color: #00ffcc">CUTTING EDGE</div>
-            <div id="buff-spd" class="buff" style="border-color: #aa00ff">SPEED</div>
+            <div id="buff-x2" class="buff" style="border-color:#ff9900">2x SCORE</div>
+            <div id="buff-x5" class="buff" style="border-color:#ff3300">5x SCORE</div>
+            <div id="buff-x10" class="buff" style="border-color:#ff0066">10x SCORE</div>
+            <div id="buff-ae" class="buff" style="border-color:#00ffcc">CUTTING EDGE</div>
+            <div id="buff-spd" class="buff" style="border-color:#aa00ff">SPEED</div>
         </div>
 
         <div id="leaderboard">
@@ -90,11 +90,10 @@
     </div>
 
     <!-- OVERLAY / POPUP (Network Error / Game Over) -->
-    <!-- We reuse the #game-over div for both scenarios -->
     <div id="game-over">
         <!-- Title changes dynamically -->
-        <h1 id="overlay-title" style="font-size: 50px; color: #ff3333;">GAME OVER</h1>
-        <p id="overlay-msg" style="font-size: 24px;">Length: <span id="final-score" style="color: #ffd700;">0</span></p>
+        <h1 id="overlay-title" style="font-size:50px; color:#ff3333;">GAME OVER</h1>
+        <p id="overlay-msg" style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
         <div class="btn-group">
             <button id="btn-home" class="menu-btn btn-blue" onclick="goHome()">EXIT TO LOBBY</button>
             <button id="btn-play" class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
@@ -106,14 +105,56 @@
     <!-- ========================================== -->
     <script>
         // ================= SERVER CONNECTION =================
+        // REPLACE WITH YOUR RENDER URL
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
-        
+
         let ws = null;
         let myId = null;
-        let remotePlayers = {};
+        let remotePlayers = {}; // Renamed from entities to avoid confusion
         let connectionActive = false;
 
-        function connect() {
+        // --- FIX: HandleMessage defined here to be Global ---
+        function handleMessage(data) {
+            if (data.type === 'init') {
+                myId = data.selfId;
+                document.getElementById("loading-screen").style.display = "none";
+                document.getElementById("ui-layer").style.display = "block";
+                initGame();
+            }
+            else if (data.type === 'update') {
+                // Update remote player
+                if (data.id !== myId) {
+                    remotePlayers[data.id] = data;
+                }
+            }
+            else if (data.type === 'remove') {
+                delete remotePlayers[data.id];
+            }
+            else if (data.type === 'spawn_food') {
+                if (data.food && Array.isArray(data.food)) {
+                    const now = Date.now();
+                    data.food.forEach(f => {
+                        food.push({
+                                    x: f.x,
+                                    y: f.y,
+                                    r: f.r,
+                                    color: f.color,
+                                    type: 0,
+                                    angle: Math.random() * Math.PI * 2,
+                                    spawnTime: now,
+                                    isDrops: true,
+                                    noGlow: false,
+                                    vx: 0, vy: 0
+                                });
+                            });
+                }
+            }
+            else if (data.type === 'die') {
+                triggerGameOver();
+            }
+        }
+
+        function attemptConnect() {
             const loadingScreen = document.getElementById("loading-screen");
             const lobby = document.getElementById("lobby");
             const input = document.getElementById("nickname-input");
@@ -131,7 +172,7 @@
         }
 
         function connectToServer() {
-            // Fix: Close any existing socket before creating new one
+            // FIX: Close any existing socket before creating new one
             if (ws) {
                 ws.close();
                 ws = null;
@@ -139,14 +180,14 @@
 
             try {
                 ws = new WebSocket(SERVER_URL);
-
+                
                 ws.onopen = () => { 
                     console.log("Connected to Game Server");
                     connectionActive = true;
-                    // Note: initGame is called when server sends 'init' message
                 };
                 
                 ws.onmessage = (event) => {
+                    // Calls the global function defined above
                     const data = JSON.parse(event.data);
                     handleMessage(data);
                 };
@@ -155,7 +196,7 @@
                     console.log("Disconnected from Server");
                     connectionActive = false;
                     // FIX: Handle network error gracefully
-                    handleNetworkError("NETWORK ERROR", "Connection lost. Please check your internet.");
+                    handleNetworkError("NETWORK ERROR", "Connection Lost. Please check your internet.");
                 };
 
                 ws.onerror = (err) => {
@@ -163,50 +204,14 @@
                     connectionActive = false;
                     handleNetworkError("CONNECTION ERROR", "Could not connect to server.");
                 };
-                
-                setInterval(sendInput, 1000/30);
-
             } catch (e) {
                 handleNetworkError("ERROR", "Failed to initialize WebSocket.");
                 goHome();
             }
         }
 
-        // --- NEW: Network Error Handler ---
-        function handleNetworkError(title, msg) {
-            // 1. Stop Game Logic
-            isGameRunning = false;
-
-            // 2. Hide Game UI Layer
-            document.getElementById('ui-layer').style.display = 'none';
-            
-            // 3. Show Overlay Popup
-            const overlay = document.getElementById('game-over');
-            overlay.style.display = 'flex';
-            
-            // 4. Set Text
-            document.getElementById('overlay-title').innerText = title;
-            document.getElementById('overlay-msg').innerText = msg;
-
-            // 5. Configure Buttons
-            const btnPlay = document.getElementById('btn-play');
-            const btnHome = document.getElementById('btn-home');
-
-            btnPlay.innerText = "RETRY";
-            btnHome.innerText = "EXIT TO LOBBY";
-            
-            // 6. Override Clicks for Network Error
-            btnPlay.onclick = () => {
-                overlay.style.display = 'none'; // Hide overlay
-                connect(); // Try connecting again
-            };
-            
-            btnHome.onclick = () => {
-                goHome();
-            };
-        }
-
         function sendInput() {
+            // --- FIX: Use remotePlayers instead of entities ---
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
             const dx = mouse.x - canvas.width/2;
             const dy = mouse.y - canvas.height/2;
@@ -216,32 +221,58 @@
                 type: 'input',
                 angle: angle,
                 boost: boosting,
-                name: entities[myId] ? entities[myId].name : "" 
+                name: remotePlayers[myId] ? remotePlayers[myId].name : "" // FIX: Use correct array name
             }));
         }
 
-        function goHome() {
-            // Clean up socket if exists
-            if (ws) {
-                ws.close();
-                ws = null;
+        function handleDisconnection() {
+            // This function is mostly replaced by handleNetworkError logic
+            // but kept for fallback
+            if (isGameRunning) {
+                showOverlay("CONNECTION LOST", "Oops! Let's try again.");
+            } else {
+                document.getElementById("loading-screen").style.display = "none";
+                document.getElementById("lobby").style.display = "flex";
             }
-            // Return to Lobby
-            document.getElementById('game-over').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('lobby').style.display = 'flex';
+        }
+
+        function showOverlay(title, msg, isError = true) {
+            // Show overlay/popup
+            document.getElementById("game-over").style.display = "flex";
+            document.getElementById("ui-layer").style.display = "none"; // Hide HUD
             
-            // Reset Game State
-            isGameRunning = false;
-            myId = null;
-            remotePlayers = {};
-            connectionActive = false;
-            // Reset vars
-            food.length = 0;
-            powerups.length = 0;
-            killCount = 0;
-            playerIsUnder = false;
+            // Set text
+            document.getElementById("overlay-title").innerText = title;
+            document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
+
+            // Change button visibility based on context
+            const btnHome = document.getElementById("btn-home");
+            const btnPlay = document.getElementById("btn-play");
+
+            if (isError) {
+                // It's an error/disconnect
+                btnPlay.innerText = "RETRY";
+                btnHome.innerText = "EXIT TO LOBBY";
+            } else {
+                // It's a game over
+                btnPlay.innerText = "PLAY AGAIN";
+                btnHome.innerText = "GO HOME";
+            }
+        }
+
+        function goHome() {
+            // Explicitly QUIT
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'quit' }));
+                ws.close();
+            }
+
+            // Reload to clear state
+            location.reload();
+        }
+        
+        function restartGame() {
+            location.reload();
         }
 
         /* ================= GLOBAL SETUP ================= */
@@ -256,8 +287,8 @@
             minimapCanvas.width = 150;
             minimapCanvas.height = 150;
         }
-        resize();
         window.addEventListener("resize", resize);
+        resize();
 
         /* ================= CONFIGURATION ================= */
         const SEGMENT_SPACING = 5;
@@ -365,7 +396,7 @@
             food = [];
             powerups = [];
             killCount = 0;
-            hsCount = 0;
+            // hsCount = 0;
             updateStatsUI();
 
             isGameOver = false;
@@ -412,7 +443,7 @@
                     angle: Math.random() * Math.PI * 2,
                     spawnTime: now,
                     isDrops: true,
-                    noGlow: false,
+                    noGlow: true,
                     vx: 0, vy: 0
                 });
                 return;
@@ -575,15 +606,15 @@
 
             // Send Data to Server
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Throttle to 20Hz
-                if (now % 50 < 17) {
+                // Throttle sending to every 50ms (20 times a sec) to save bandwidth
+                if (now % 50 < 17) { 
                     const payload = {
                         type: 'update',
                         x: head.x,
                         y: head.y,
                         angle: head.angle,
                         length: length,
-                        path: path,
+                        path: path, // Send path for others to see
                         name: playerName,
                         color: playerColor
                     };
@@ -611,6 +642,7 @@
                 if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
 
                 if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
+                    // SLOWER GROWTH LOGIC:
                     const growthFactor = Math.max(0.1, 50 / length);
                     length += (f.r / 4) * currentMult * growthFactor;
 
@@ -797,6 +829,8 @@
                     killBot(i);
                     hsCount++;
                     updateStatsUI();
+                    // const audio = document.getElementById('hs-audio'); // Removed HS audio ID ref to avoid error
+                    // if (audio) { audio.currentTime = 0; audio.play().catch(() => { }); }
                     continue;
                 }
                 else if (res === 2) { triggerGameOver(); return; }
@@ -849,6 +883,55 @@
             if (type === 'spd') expiries.spd = now + duration;
         }
 
+        function handleNetworkError(title, msg, isError = true) {
+            // 1. Stop Game Logic
+            isGameRunning = false;
+
+            // 2. Hide Game UI Layer
+            document.getElementById('ui-layer').style.display = 'none';
+            
+            // 3. Show Overlay Popup
+            const overlay = document.getElementById('game-over');
+            overlay.style.display = 'flex';
+            
+            // 4. Set Text
+            document.getElementById('overlay-title').innerText = title;
+            document.getElementById('overlay-msg').innerHTML = msg;
+
+            // 5. Configure Buttons
+            const btnPlay = document.getElementById('btn-play');
+            const btnHome = document.getElementById('btn-home');
+
+            if (isError) {
+                // It's an error/disconnect
+                btnPlay.innerText = "RETRY";
+                btnHome.innerText = "EXIT TO LOBBY";
+                
+                // Override Clicks for Network Error
+                btnPlay.onclick = () => {
+                    overlay.style.display = 'none'; 
+                    // Clean up old socket properly
+                    if(ws) ws.close();
+                    connect(); // Try connecting again
+                };
+            } else {
+                // It's a game over
+                btnPlay.innerText = "PLAY AGAIN";
+                btnHome.innerText = "GO HOME";
+                
+                // Override Clicks for Game Over
+                btnPlay.onclick = () => {
+                    overlay.style.display = 'none';
+                    restartGame();
+                };
+            }
+            
+            btnHome.onclick = () => {
+                overlay.style.display = 'none';
+                goHome();
+            };
+        }
+
         function triggerGameOver() {
             if (isGameOver) return;
 
@@ -864,36 +947,16 @@
             explodeWorm(path, playerColor);
             
             // Show Game Over UI
-            const overlay = document.getElementById('game-over');
-            overlay.style.display = 'flex';
-            
-            // Reset Text for Game Over
-            document.getElementById('overlay-title').innerText = "GAME OVER";
-            document.getElementById('overlay-msg').innerText = `Score: ${Math.floor(length * 10)}`;
-            
-            // Reset Buttons for Game Over
-            const btnPlay = document.getElementById('btn-play');
-            const btnHome = document.getElementById('btn-home');
-            
-            btnPlay.innerText = "PLAY AGAIN";
-            btnHome.innerText = "GO HOME";
-            
-            // Override Clicks for Game Over
-            btnPlay.onclick = () => {
-                overlay.style.display = 'none';
-                restartGame();
-            };
-            
-            btnHome.onclick = () => {
-                goHome();
-            };
+            const score = Math.floor(length * 10);
+            showOverlay("GAME OVER", `Length: ${score}`);
         }
 
         function restartGame() {
             // Ensure we are in a clean state
             const overlay = document.getElementById('game-over');
-            overlay.style.display = 'none';
-            // Reset Buttons to Default (handled in overlay logic)
+            if (overlay) overlay.style.display = 'none';
+            
+            // Reset Buttons to Default
             const btnPlay = document.getElementById('btn-play');
             const btnHome = document.getElementById('btn-home');
             btnPlay.innerText = "PLAY AGAIN";
@@ -1184,7 +1247,6 @@
             ctx.beginPath();
             ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI * 2);
             ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
-            ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
             ctx.fill();
 
             ctx.strokeStyle = "#e43b3b";
@@ -1325,8 +1387,12 @@
             const maxR = 60;
 
             // Use Logarithmic scale so 100000 mass doesn't cover map
+            // log10(50) ~=1.7, log10(100000) ~= 5
+            // We want to map this range to minR -> maxR
+
             const base = Math.log10(Math.max(len, 50));
-            const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
+            const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); // Maps len 50->500000 roughly
+
             return minR + (maxR - minR) * t;
         }
 
@@ -1357,11 +1423,12 @@
             const now = performance.now();
             let dt = (now - lastTime) / (1000 / 60);
             lastTime = now;
-            if (dt > 10) dt = 1;
+            if (dt > 10) dt = 1; // Cap lag
 
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
                 // const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
+                // document.getElementById('fps-box').innerText = "FPS: " + fps; 
                 lastFpsUpdate = now;
                 frameCount = 0;
             }
@@ -1370,6 +1437,7 @@
             draw();
         }
 
+        // Start loop immediately
         loop();
     </script>
 </body>
