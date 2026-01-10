@@ -2,51 +2,71 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Render Connected</title>
+    <title>Wormate Clone - Ultimate</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
 
+        /* UI LAYERS */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
 
+        /* MINIMAP */
         #minimap-container { position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.5); border-radius: 50%; border: 3px solid #333; overflow: hidden; }
         #minimap { width: 100%; height: 100%; }
 
+        /* STATS */
         #stats-ui { position: absolute; top: 180px; left: 20px; color: white; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.4); padding: 5px 10px; border-radius: 8px; }
         #stats-ui span { color: #ffd700; margin-left: 5px; }
 
+        /* BUFFS */
         #status-box { position: absolute; top: 220px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
         .buff { background: rgba(0,0,0,0.6); color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; border-left: 5px solid; display: none; align-items: center; }
         
+        /* LEADERBOARD */
         #leaderboard { position: absolute; top: 20px; right: 20px; width: 200px; background: rgba(0,0,0,0.6); color: white; padding: 15px; border-radius: 10px; }
         #leaderboard h3 { margin: 0 0 10px 0; text-align: center; color: #ffd700; }
         .lb-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
         .lb-me { color: #00ff00; font-weight: bold; }
 
-        #clock-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; }
+        /* TIMER */
+        #timer-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; }
 
-        #game-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
+        /* LOBBY */
+        #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11,11,18,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; }
+        #lobby h1 { font-size: 60px; color: #ffd700; margin-bottom: 20px; text-shadow: 0 0 20px #ff9900; }
+        #nickname-input { padding: 15px; border-radius: 30px; border: 2px solid #444; background: #222; color: white; font-size: 20px; text-align: center; margin-bottom: 20px; outline: none; width: 250px; }
+        
+        /* LOADING */
+        #loading-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 300; }
+        .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid #00cc66; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* DISCONNECT / GAME OVER */
+        #overlay-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
         .menu-btn { padding: 15px 40px; font-size: 24px; color: white; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; transition: transform 0.2s; }
         .btn-green { background: #00cc66; }
         .btn-blue { background: #3366ff; }
         .menu-btn:hover { transform: scale(1.1); }
-
-        #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11,11,18,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; }
-        #lobby h1 { font-size: 60px; color: #ffd700; margin-bottom: 20px; text-shadow: 0 0 20px #ff9900; }
-        #nickname-input { padding: 15px; border-radius: 30px; border: 2px solid #444; background: #222; color: white; font-size: 20px; text-align: center; margin-bottom: 20px; outline: none; width: 250px; }
     </style>
 </head>
 <body>
 
     <canvas id="game"></canvas>
 
+    <!-- LOADING -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <h2>Connecting to Server...</h2>
+    </div>
+
+    <!-- LOBBY -->
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-        <button class="menu-btn btn-green" onclick="startGame()">PLAY</button>
-        <div id="status-msg" style="color:white; margin-top:10px; font-size:14px; opacity:0.8;"></div>
+        <button class="menu-btn btn-green" onclick="attemptConnect()">PLAY</button>
     </div>
 
+    <!-- GAME UI -->
     <div id="ui-layer">
         <div id="minimap-container"><canvas id="minimap"></canvas></div>
         <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
@@ -63,34 +83,37 @@
             <h3>Leaderboard</h3>
             <div id="lb-content"></div>
         </div>
-        <div id="clock-display">00:00</div>
+        <div id="timer-display">00:00</div>
     </div>
 
-    <div id="game-over">
-        <h1 style="font-size:50px; color:#ff3333;">GAME OVER</h1>
-        <p style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
-        <button class="menu-btn btn-green" onclick="location.reload()">Play Again</button>
+    <!-- OVERLAY (Disconnect/Game Over) -->
+    <div id="overlay-screen">
+        <h1 id="overlay-title" style="font-size:50px; color:#ff3333;">GAME OVER</h1>
+        <p id="overlay-msg" style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
+        <button class="menu-btn btn-blue" onclick="goHome()">GO HOME</button>
+        <button class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
     </div>
 
     <script>
-        // ========================================================
-        // HARDCODED SERVER URL (FIX)
-        // ========================================================
+        // --- CONFIG ---
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
-        // ========================================================
-
         const canvas = document.getElementById("game");
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { alpha: false }); // Optimize
         const miniCanvas = document.getElementById("minimap");
         const miniCtx = miniCanvas.getContext("2d");
 
+        // --- STATE ---
         let ws;
         let myId = null;
         let isGameRunning = false;
-        let reconnectAttempts = 0;
-        const MAX_RETRIES = 10;
+        let startTime = 0;
+        let gameTime = 0; // Play time in seconds
+
+        // Zoom
+        let zoom = 1.0;
         
         let serverState = { players: {}, bots: [], food: [] };
+        // Smoothed entities (Client-side prediction & interpolation)
         let entities = {}; 
 
         let mouse = { x: 0, y: 0 };
@@ -105,44 +128,66 @@
         window.addEventListener("resize", resize);
         resize();
 
+        // --- INPUT ---
         window.addEventListener("mousemove", e => {
             mouse.x = e.clientX;
             mouse.y = e.clientY;
         });
         window.addEventListener("mousedown", () => boosting = true);
         window.addEventListener("mouseup", () => boosting = false);
+        window.addEventListener("keydown", e => { if(e.code === "Space") boosting = true; });
+        window.addEventListener("keyup", e => { if(e.code === "Space") boosting = false; });
 
-        function startGame() {
+        // ZOOM
+        window.addEventListener("wheel", e => {
+            const zoomSpeed = 0.001;
+            zoom -= e.deltaY * zoomSpeed;
+            if (zoom < 0.3) zoom = 0.3;
+            if (zoom > 2.0) zoom = 2.0;
+        }, { passive: true });
+
+        // --- SKIN SYSTEM (Placeholder for your JSON) ---
+        const skinImage = new Image();
+        // Using a generated texture for demo to ensure it works without external assets
+        skinImage.src = createDefaultSkinTexture(); 
+
+        function createDefaultSkinTexture() {
+            const c = document.createElement('canvas');
+            c.width = 64; c.height = 64;
+            const cx = c.getContext('2d');
+            
+            // Draw a cool alien-like skin
+            const grad = cx.createRadialGradient(32,32,0,32,32,32);
+            grad.addColorStop(0, '#ff99cc');
+            grad.addColorStop(1, '#660099');
+            cx.fillStyle = grad;
+            cx.beginPath(); cx.arc(32,32,30,0,Math.PI*2); cx.fill();
+            
+            // Spots
+            cx.fillStyle = 'rgba(255,255,255,0.3)';
+            for(let i=0; i<5; i++) {
+                cx.beginPath();
+                cx.arc(32 + (Math.random()-0.5)*40, 32 + (Math.random()-0.5)*40, 4, 0, Math.PI*2);
+                cx.fill();
+            }
+            return c.toDataURL();
+        }
+
+        // --- CONNECTION ---
+        function attemptConnect() {
             const name = document.getElementById("nickname-input").value || "Guest";
             document.getElementById("lobby").style.display = "none";
-            document.getElementById("status-msg").innerText = "Connecting to Render Server...";
+            document.getElementById("loading-screen").style.display = "flex";
+            
             connect(name);
         }
 
         function connect(playerName) {
-            reconnectAttempts++;
-            const statusMsg = document.getElementById("status-msg");
-            
-            // Only show status in lobby UI if we haven't started game yet
-            if(!document.getElementById("lobby").style.display || document.getElementById("lobby").style.display === 'none') {
-                 // We are in game or transition, alert instead
-            } else {
-                statusMsg.innerText = `Connecting... Attempt ${reconnectAttempts}/${MAX_RETRIES}`;
-            }
-
             try {
                 ws = new WebSocket(SERVER_URL);
                 
                 ws.onopen = () => { 
-                    console.log("Connected to " + SERVER_URL); 
-                    reconnectAttempts = 0; 
-                    statusMsg.innerText = "";
-                    
-                    // Hide lobby, show game if not already showing
-                    if(document.getElementById("ui-layer").style.display === 'none') {
-                        document.getElementById("ui-layer").style.display = "block";
-                        document.getElementById("lobby").style.display = "none";
-                    }
+                    console.log("Connected");
                 };
                 
                 ws.onmessage = (event) => {
@@ -151,37 +196,24 @@
                 };
                 
                 ws.onclose = () => {
-                    if (!isGameRunning) {
-                        console.log("Connection closed. Retrying...");
-                        if (reconnectAttempts < MAX_RETRIES) {
-                            setTimeout(() => connect(playerName), 2000); 
-                        } else {
-                            alert("Connection failed. The server might be asleep or down.");
-                            location.reload();
-                        }
-                    } else {
-                        // Disconnect during game
-                        alert("Disconnected from server.");
-                        location.reload();
-                    }
+                    showOverlay("CONNECTION LOST", "Oops! Let's try again.");
                 };
 
                 ws.onerror = (err) => {
-                    console.error("WS Error:", err);
-                    statusMsg.innerText = "Connection Error. Retrying...";
+                    console.error(err);
+                    showOverlay("CONNECTION ERROR", "Could not reach server.");
                 };
                 
                 setInterval(sendInput, 1000/30);
 
             } catch(e) {
-                console.error(e);
-                if (reconnectAttempts < MAX_RETRIES) setTimeout(() => connect(playerName), 2000);
-                else alert("Critical connection error.");
+                alert("Connection failed");
+                goHome();
             }
         }
 
         function sendInput() {
-            if (!ws || ws.readyState !== WebSocket.OPEN || !myId) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
             const dx = mouse.x - canvas.width/2;
             const dy = mouse.y - canvas.height/2;
             const angle = Math.atan2(dy, dx);
@@ -197,16 +229,10 @@
         function handleMessage(data) {
             if (data.type === 'init') {
                 myId = data.id;
+                document.getElementById("loading-screen").style.display = "none";
                 document.getElementById("ui-layer").style.display = "block";
-                document.getElementById("lobby").style.display = "none";
                 isGameRunning = true;
-                
-                const name = document.getElementById("nickname-input").value;
-                entities[data.id] = { 
-                    ...data, 
-                    localX: 0, localY: 0, localA: 0, 
-                    name: name 
-                };
+                startTime = Date.now();
                 loop();
             }
             else if (data.type === 'state') {
@@ -215,25 +241,32 @@
             }
             else if (data.type === 'die') {
                 if (data.id === myId) {
-                    triggerGameOver();
+                    showOverlay("GAME OVER", `Length: ${Math.floor((entities[myId]?entities[myId].length:0)*10)}`);
                 } else {
                     delete entities[data.id];
                 }
             }
         }
 
+        // --- INTERPOLATION & PREDICTION ---
         function updateLocalEntities() {
             serverState.players.forEach(p => {
                 if (!entities[p.id]) {
-                    entities[p.id] = { ...p };
+                    entities[p.id] = { 
+                        ...p, 
+                        localX: p.x, localY: p.y, localA: p.a,
+                        // Track last pos for velocity calc
+                        lastX: p.x, lastY: p.y
+                    };
                 } else {
                     const ent = entities[p.id];
+                    // LERP: Smooth movement between last known pos and current server pos
                     const lerp = 0.2; 
+                    ent.localX += (p.x - ent.localX) * lerp;
+                    ent.localY += (p.y - ent.localY) * lerp;
+                    ent.localA += shortestAngle(ent.localA, p.a) * lerp;
                     
-                    ent.localX = ent.localX + (p.x - ent.localX) * lerp;
-                    ent.localY = ent.localY + (p.y - ent.localY) * lerp;
-                    ent.localA = ent.localA + shortestAngle(ent.localA, p.a) * lerp;
-                    
+                    // Update properties
                     ent.length = p.l;
                     ent.path = p.p;
                     ent.buffs = p.b;
@@ -243,15 +276,16 @@
                 }
             });
 
+            // Same for bots
             serverState.bots.forEach(b => {
                 if (!entities[b.id]) {
-                    entities[b.id] = { ...b };
+                    entities[b.id] = { ...b, localX: b.x, localY: b.y, localA: b.a, lastX: b.x, lastY: b.y };
                 } else {
                     const ent = entities[b.id];
                     const lerp = 0.2;
-                    ent.localX = ent.localX + (b.x - ent.localX) * lerp;
-                    ent.localY = ent.localY + (b.y - ent.localY) * lerp;
-                    ent.localA = ent.localA + shortestAngle(ent.localA, b.a) * lerp;
+                    ent.localX += (b.x - ent.localX) * lerp;
+                    ent.localY += (b.y - ent.localY) * lerp;
+                    ent.localA += shortestAngle(ent.localA, b.a) * lerp;
                     ent.length = b.l;
                     ent.path = b.p;
                     ent.color = b.c;
@@ -265,13 +299,28 @@
             return (d + Math.PI) % (Math.PI * 2) - Math.PI;
         }
 
-        function triggerGameOver() {
+        function showOverlay(title, msg) {
             isGameRunning = false;
-            document.getElementById("game-over").style.display = "flex";
-            const me = entities[myId];
-            document.getElementById("final-score").innerText = Math.floor(me ? me.length : 0);
-            ws.close();
+            document.getElementById("overlay-screen").style.display = "flex";
+            document.getElementById("overlay-title").innerText = title;
+            document.getElementById("overlay-msg").innerText = msg;
+            if(ws) ws.close();
         }
+
+        function goHome() {
+            location.reload();
+        }
+        
+        function restartGame() {
+            if(ws && ws.readyState === WebSocket.OPEN) {
+                 // Server handles respawn usually, but here we reload for simplicity
+                 location.reload();
+            } else {
+                location.reload();
+            }
+        }
+
+        // --- RENDERER ---
         
         function draw() {
             ctx.fillStyle = "#0b0b12";
@@ -285,13 +334,16 @@
 
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
-            const zoom = Math.max(0.3, 1 - (me.length / 5000));
             ctx.scale(zoom, zoom);
             ctx.translate(-camX, -camY);
 
+            // GRID & BORDER
             drawGrid(camX, camY);
             drawFood();
+            drawPowerups();
 
+            // Draw Snakes
+            // Draw others first
             for (const id in entities) {
                 if (id !== myId) drawSnake(entities[id]);
             }
@@ -306,7 +358,7 @@
             ctx.lineWidth = 2;
             ctx.beginPath();
             const size = 100;
-            const range = 1000;
+            const range = 1500 / zoom; // Draw more grid if zoomed out
             const startX = Math.floor((cx - range) / size) * size;
             const endX = Math.floor((cx + range) / size) * size;
             const startY = Math.floor((cy - range) / size) * size;
@@ -320,8 +372,9 @@
             }
             ctx.stroke();
 
+            // Map Border
             ctx.beginPath();
-            ctx.arc(0,0,6000,0,Math.PI*2);
+            ctx.arc(0,0,MAP_RADIUS,0,Math.PI*2);
             ctx.strokeStyle = "#333";
             ctx.lineWidth = 50;
             ctx.stroke();
@@ -330,37 +383,104 @@
         function drawFood() {
             const me = entities[myId];
             if(!me) return;
+            // Culling
+            const range = 1500 / zoom;
+            
             for (const f of serverState.food) {
-                if (Math.abs(f.x - me.localX) > 1500 && Math.abs(f.y - me.localY) > 1500) continue;
+                if (Math.abs(f.x - me.localX) > range || Math.abs(f.y - me.localY) > range) continue;
+                
+                ctx.save();
+                ctx.translate(f.x, f.y);
+                ctx.rotate(f.angle + gameTime);
                 ctx.fillStyle = f.color;
                 ctx.beginPath();
-                ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
+                // Simple food shape
+                ctx.arc(0, 0, f.r, 0, Math.PI*2);
                 ctx.fill();
+                ctx.restore();
             }
+        }
+
+        function drawPowerups() {
+            const me = entities[myId];
+            if(!me) return;
+            for (const p of serverState.powerups || []) { // Note: Server needs to send powerups in 'state' or we manage locally
+                // Since current server code doesn't send powerups in state, we skip drawing them for now 
+                // or assume they are in food array with specific type
+                // For this demo, we'll assume they are handled by the server logic or simplified
+            })
         }
 
         function drawSnake(s, isMe) {
             if (!s.path) return;
             const radius = getRadius(s.length);
-            ctx.fillStyle = s.color;
             
+            // CALCULATE VELOCITY FOR SQUEEZING
+            const dx = s.localX - (s.lastX || s.localX);
+            const dy = s.localY - (s.lastY || s.localY);
+            const speed = Math.hypot(dx, dy);
+            
+            // Squeeze Factor: stretch in direction of movement, compress sideways
+            // Simplified: Stretch X if horizontal, Y if vertical
+            const angle = s.localA;
+            const stretch = 1 + (speed * 0.04);
+            const squash = 1 / stretch;
+
             for (let i = s.path.length - 1; i >= 0; i-=2) { 
                 const p = s.path[i];
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
-                ctx.fill();
+                
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                
+                // Apply Squeezing only to body, not head
+                if (i < s.path.length - 5) {
+                    ctx.rotate(angle);
+                    ctx.scale(stretch, squash);
+                    ctx.rotate(-angle);
+                }
+
+                // DRAW SKIN or CIRCLE
+                if (skinImage.complete && skinImage.naturalWidth !== 0) {
+                     // Draw image
+                     ctx.drawImage(skinImage, -radius, -radius, radius*2, radius*2);
+                } else {
+                    // Fallback Circle
+                    ctx.fillStyle = s.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    // Shiny overlay to make it look less like "circles"
+                    ctx.fillStyle = "rgba(255,255,255,0.1)";
+                    ctx.beginPath();
+                    ctx.arc(-radius*0.2, -radius*0.2, radius*0.4, 0, Math.PI*2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
             }
 
+            // HEAD (Always drawn normally, not squeezed)
             const headX = s.localX || s.x;
             const headY = s.localY || s.y;
             const headA = s.localA || s.a;
 
-            ctx.fillStyle = s.color;
-            ctx.beginPath();
-            ctx.arc(headX, headY, radius, 0, Math.PI*2);
-            ctx.fill();
+            ctx.save();
+            ctx.translate(headX, headY);
+            ctx.rotate(headA);
 
-            drawFace(headX, headY, headA, radius);
+            // Skin for Head
+            if (skinImage.complete && skinImage.naturalWidth !== 0) {
+                 ctx.drawImage(skinImage, -radius, -radius, radius*2, radius*2);
+            } else {
+                ctx.fillStyle = s.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, radius, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            drawFace(0, 0, headA, radius);
+            ctx.restore();
 
             if (!isMe) {
                 ctx.fillStyle = "white";
@@ -372,17 +492,29 @@
 
         function drawFace(x, y, angle, r) {
             ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle);
+            // Face is already rotated by parent, but we ensure it looks "towards center/mouse"
+            // Actually Wormate eyes rotate separately slightly based on mouse
+            // Here we just draw static relative to head
+            
+            const eyeX = r * 0.3;
+            const eyeY = r * 0.28;
+            const eyeR = r * 0.35;
+
             ctx.fillStyle = "white";
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = Math.max(2, r * 0.12);
+
             ctx.beginPath();
-            ctx.arc(r*0.3, -r*0.3, r*0.35, 0, Math.PI*2); 
-            ctx.arc(r*0.3, r*0.3, r*0.35, 0, Math.PI*2);  
+            ctx.arc(eyeX, -eyeY, eyeR, 0, Math.PI*2);
+            ctx.arc(eyeX, eyeY, eyeR, 0, Math.PI*2);
             ctx.fill();
+            ctx.stroke();
+
             ctx.fillStyle = "black";
+            const pupilR = eyeR * 0.28;
             ctx.beginPath();
-            ctx.arc(r*0.35, -r*0.3, r*0.1, 0, Math.PI*2);
-            ctx.arc(r*0.35, r*0.3, r*0.1, 0, Math.PI*2);
+            ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI*2);
+            ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI*2);
             ctx.fill();
             ctx.restore();
         }
@@ -399,19 +531,30 @@
             toggleBuff("buff-ae", buffs.ae, now);
             toggleBuff("buff-spd", buffs.spd, now);
 
+            // Timer
+            if(isGameRunning) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+                const secs = (elapsed % 60).toString().padStart(2, '0');
+                document.getElementById("timer-display").innerText = `${mins}:${secs}`;
+                gameTime += 0.02; // For food rotation
+            }
+
+            // Minimap
             miniCtx.fillStyle = "rgba(0,0,0,0.8)";
             miniCtx.fillRect(0,0,150,150);
             for(const id in entities) {
                 const e = entities[id];
                 if(!e.localX) continue;
-                const mx = 75 + (e.localX / 6000) * 75;
-                const my = 75 + (e.localY / 6000) * 75;
+                const mx = 75 + (e.localX / MAP_RADIUS) * 75;
+                const my = 75 + (e.localY / MAP_RADIUS) * 75;
                 miniCtx.fillStyle = (id === myId) ? "white" : e.color;
                 miniCtx.beginPath();
                 miniCtx.arc(mx, my, id === myId ? 3 : 2, 0, Math.PI*2);
                 miniCtx.fill();
             }
 
+            // Leaderboard
             const list = Object.values(entities).sort((a,b) => b.length - a.length).slice(0,10);
             let html = "";
             list.forEach((p, i) => {
@@ -419,10 +562,6 @@
                 html += `<div class="${cls}"><span>#${i+1} ${p.name}</span><span>${Math.floor(p.length*10)}</span></div>`;
             });
             document.getElementById("lb-content").innerHTML = html;
-
-            const d = new Date();
-            document.getElementById("clock-display").innerText = 
-                d.getHours().toString().padStart(2,'0') + ":" + d.getMinutes().toString().padStart(2,'0');
         }
 
         function toggleBuff(id, expiry, now) {
