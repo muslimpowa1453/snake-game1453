@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Fixed</title>
+    <title>Wormate Clone - Fixed Connection</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -43,8 +43,8 @@
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-        <button class="menu-btn btn-green" onclick="connect()">PLAY</button>
-        <div id="status-msg" style="color:white; margin-top:10px;"></div>
+        <button class="menu-btn btn-green" onclick="startConnectionProcess()">PLAY</button>
+        <div id="status-msg" style="color:white; margin-top:10px; min-height: 20px;"></div>
     </div>
 
     <div id="ui-layer">
@@ -73,7 +73,7 @@
     </div>
 
     <script>
-        // AUTO-DETECT URL: Works for Localhost AND Render Deployment
+        // Determine URL
         const loc = window.location;
         const SERVER_URL = (loc.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + loc.host;
 
@@ -85,6 +85,8 @@
         let ws;
         let myId = null;
         let isGameRunning = false;
+        let reconnectAttempts = 0;
+        const MAX_RETRIES = 5;
         
         let serverState = { players: {}, bots: [], food: [] };
         let entities = {}; 
@@ -108,17 +110,32 @@
         window.addEventListener("mousedown", () => boosting = true);
         window.addEventListener("mouseup", () => boosting = false);
 
-        function connect() {
+        function startConnectionProcess() {
             const name = document.getElementById("nickname-input").value || "Guest";
             document.getElementById("lobby").style.display = "none";
-            document.getElementById("status-msg").innerText = "Connecting...";
+            // Show a temporary connecting overlay or status
+            alert("Connecting to server... If this is your first visit in a while, it may take a few seconds for the server to wake up.");
+            connect(name);
+        }
+
+        function connect(playerName) {
+            reconnectAttempts++;
+            const statusMsg = document.getElementById("status-msg");
             
             try {
                 ws = new WebSocket(SERVER_URL);
                 
                 ws.onopen = () => { 
                     console.log("Connected to " + SERVER_URL); 
-                    document.getElementById("status-msg").innerText = "";
+                    reconnectAttempts = 0; // Reset counter
+                    statusMsg.innerText = "";
+                    
+                    // Send init data
+                    const data = JSON.stringify({
+                        type: 'input',
+                        name: playerName
+                    });
+                    ws.send(data);
                 };
                 
                 ws.onmessage = (event) => {
@@ -127,15 +144,31 @@
                 };
                 
                 ws.onclose = () => {
-                    alert("Disconnected from server. Reloading...");
-                    location.reload();
+                    if (!isGameRunning) {
+                        console.log("Connection closed. Retrying...");
+                        if (reconnectAttempts < MAX_RETRIES) {
+                            setTimeout(() => connect(playerName), 2000); // Retry after 2s
+                        } else {
+                            alert("Could not connect to server after 5 attempts. Please refresh.");
+                            location.reload();
+                        }
+                    } else {
+                        // Disconnect during game
+                        alert("Disconnected from server.");
+                        location.reload();
+                    }
+                };
+
+                ws.onerror = (err) => {
+                    console.error("WebSocket Error:", err);
                 };
                 
                 setInterval(sendInput, 1000/30);
 
             } catch(e) {
-                alert("Connection failed: " + e.message);
-                location.reload();
+                console.error(e);
+                if (reconnectAttempts < MAX_RETRIES) setTimeout(() => connect(playerName), 2000);
+                else alert("Critical connection error.");
             }
         }
 
