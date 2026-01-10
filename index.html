@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Fixed IDs</title>
+    <title>Wormate Clone - Network Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -41,12 +41,15 @@
         .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid #00cc66; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* OVERLAY */
+        /* OVERLAY / POPUP */
         #game-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
         .menu-btn { padding: 15px 40px; font-size: 24px; color: white; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; transition: transform 0.2s; }
         .btn-green { background: #00cc66; }
+        .btn-green:hover { transform: scale(1.1); background: #00ee77; }
         .btn-blue { background: #3366ff; }
-        .menu-btn:hover { transform: scale(1.1); }
+        .btn-blue:hover { transform: scale(1.1); background: #5588ff; }
+        .btn-red { background: #cc3333; }
+        .btn-red:hover { transform: scale(1.1); background: #ff4444; }
     </style>
 </head>
 <body>
@@ -72,39 +75,45 @@
         <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
         
         <div id="status-box">
-            <div id="buff-x2" class="buff" style="border-color:#ff9900">2x SCORE</div>
-            <div id="buff-x5" class="buff" style="border-color:#ff3300">5x SCORE</div>
-            <div id="buff-x10" class="buff" style="border-color:#ff0066">10x SCORE</div>
-            <div id="buff-ae" class="buff" style="border-color:#00ffcc">CUTTING EDGE</div>
-            <div id="buff-spd" class="buff" style="border-color:#aa00ff">SPEED</div>
+            <div id="buff-x2" class="buff" style="border-color: #ff9900">2x SCORE</div>
+            <div id="buff-x5" class="buff" style="border-color: #ff3300">5x SCORE</div>
+            <div id="buff-x10" class="buff" style="border-color: #ff0066">10x SCORE</div>
+            <div id="buff-ae" class="buff" style="border-color: #00ffcc">CUTTING EDGE</div>
+            <div id="buff-spd" class="buff" style="border-color: #aa00ff">SPEED</div>
         </div>
 
         <div id="leaderboard">
-            <h3>Leaderboard</h3>
+            <h3>Leaderboard <span id="online-count">(0 online)</span></h3>
             <div id="lb-content"></div>
         </div>
         <div id="clock-display">00:00</div>
     </div>
 
-    <!-- OVERLAY (Disconnect/Game Over) -->
+    <!-- OVERLAY / POPUP (Network Error / Game Over) -->
+    <!-- We reuse the #game-over div for both scenarios -->
     <div id="game-over">
-        <h1 id="overlay-title" style="font-size:50px; color:#ff3333;">GAME OVER</h1>
-        <p id="overlay-msg" style="font-size:24px;">Length: <span id="final-score" style="color:#ffd700;">0</span></p>
-        <button class="menu-btn btn-blue" onclick="goHome()">GO HOME</button>
-        <button class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
+        <!-- Title changes dynamically -->
+        <h1 id="overlay-title" style="font-size: 50px; color: #ff3333;">GAME OVER</h1>
+        <p id="overlay-msg" style="font-size: 24px;">Length: <span id="final-score" style="color: #ffd700;">0</span></p>
+        <div class="btn-group">
+            <button id="btn-home" class="menu-btn btn-blue" onclick="goHome()">EXIT TO LOBBY</button>
+            <button id="btn-play" class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
+        </div>
     </div>
 
+    <!-- ========================================== -->
+    <!--               GAME.JS                      -->
+    <!-- ========================================== -->
     <script>
         // ================= SERVER CONNECTION =================
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
-
+        
         let ws = null;
         let myId = null;
         let remotePlayers = {};
         let connectionActive = false;
 
         function connect() {
-            // FIX: Correct ID matching HTML
             const loadingScreen = document.getElementById("loading-screen");
             const lobby = document.getElementById("lobby");
             const input = document.getElementById("nickname-input");
@@ -122,11 +131,17 @@
         }
 
         function connectToServer() {
+            // Fix: Close any existing socket before creating new one
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
             try {
                 ws = new WebSocket(SERVER_URL);
-                
+
                 ws.onopen = () => { 
-                    console.log("Connected");
+                    console.log("Connected to Game Server");
                     connectionActive = true;
                     // Note: initGame is called when server sends 'init' message
                 };
@@ -137,22 +152,58 @@
                 };
                 
                 ws.onclose = () => {
-                    console.log("Disconnected");
+                    console.log("Disconnected from Server");
                     connectionActive = false;
-                    handleDisconnection();
+                    // FIX: Handle network error gracefully
+                    handleNetworkError("NETWORK ERROR", "Connection lost. Please check your internet.");
                 };
 
                 ws.onerror = (err) => {
-                    console.error("WS Error:", err);
+                    console.error("WebSocket Error:", err);
                     connectionActive = false;
-                    handleDisconnection();
+                    handleNetworkError("CONNECTION ERROR", "Could not connect to server.");
                 };
                 
                 setInterval(sendInput, 1000/30);
 
-            } catch(e) {
-                handleDisconnection();
+            } catch (e) {
+                handleNetworkError("ERROR", "Failed to initialize WebSocket.");
+                goHome();
             }
+        }
+
+        // --- NEW: Network Error Handler ---
+        function handleNetworkError(title, msg) {
+            // 1. Stop Game Logic
+            isGameRunning = false;
+
+            // 2. Hide Game UI Layer
+            document.getElementById('ui-layer').style.display = 'none';
+            
+            // 3. Show Overlay Popup
+            const overlay = document.getElementById('game-over');
+            overlay.style.display = 'flex';
+            
+            // 4. Set Text
+            document.getElementById('overlay-title').innerText = title;
+            document.getElementById('overlay-msg').innerText = msg;
+
+            // 5. Configure Buttons
+            const btnPlay = document.getElementById('btn-play');
+            const btnHome = document.getElementById('btn-home');
+
+            btnPlay.innerText = "RETRY";
+            btnHome.innerText = "EXIT TO LOBBY";
+            
+            // 6. Override Clicks for Network Error
+            btnPlay.onclick = () => {
+                overlay.style.display = 'none'; // Hide overlay
+                connect(); // Try connecting again
+            };
+            
+            btnHome.onclick = () => {
+                goHome();
+            };
         }
 
         function sendInput() {
@@ -169,29 +220,28 @@
             }));
         }
 
-        function handleDisconnection() {
-            if (isGameRunning) {
-                showOverlay("CONNECTION LOST", "Please check your internet.");
-            } else {
-                document.getElementById("loading-screen").style.display = "none";
-                document.getElementById("lobby").style.display = "flex";
-            }
-        }
-
-        function showOverlay(title, msg) {
-            isGameRunning = false;
-            document.getElementById("game-over").style.display = "flex";
-            document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerText = msg;
-            if(ws) ws.close();
-        }
-
         function goHome() {
-            location.reload();
-        }
-        
-        function restartGame() {
-            location.reload();
+            // Clean up socket if exists
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            // Return to Lobby
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'none';
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('lobby').style.display = 'flex';
+            
+            // Reset Game State
+            isGameRunning = false;
+            myId = null;
+            remotePlayers = {};
+            connectionActive = false;
+            // Reset vars
+            food.length = 0;
+            powerups.length = 0;
+            killCount = 0;
+            playerIsUnder = false;
         }
 
         /* ================= GLOBAL SETUP ================= */
@@ -206,8 +256,8 @@
             minimapCanvas.width = 150;
             minimapCanvas.height = 150;
         }
-        window.addEventListener("resize", resize);
         resize();
+        window.addEventListener("resize", resize);
 
         /* ================= CONFIGURATION ================= */
         const SEGMENT_SPACING = 5;
@@ -242,7 +292,7 @@
         let food = [];
         let powerups = [];
         let killCount = 0;
-        // let hsCount = 0; // Disabled to fix error, not in HTML
+        let hsCount = 0;
         let playerIsUnder = false;
 
         let expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
@@ -315,7 +365,7 @@
             food = [];
             powerups = [];
             killCount = 0;
-            // hsCount = 0;
+            hsCount = 0;
             updateStatsUI();
 
             isGameOver = false;
@@ -331,6 +381,7 @@
             for (let i = 0; i < 120; i++) spawnPowerup();
 
             document.getElementById('game-over').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'block';
         }
 
         function resetBot(bot) {
@@ -361,7 +412,7 @@
                     angle: Math.random() * Math.PI * 2,
                     spawnTime: now,
                     isDrops: true,
-                    noGlow: true,
+                    noGlow: false,
                     vx: 0, vy: 0
                 });
                 return;
@@ -524,15 +575,15 @@
 
             // Send Data to Server
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Throttle sending to every 50ms (20 times a sec) to save bandwidth
-                if (now % 50 < 17) { // Approx 20fps sending
+                // Throttle to 20Hz
+                if (now % 50 < 17) {
                     const payload = {
                         type: 'update',
                         x: head.x,
                         y: head.y,
                         angle: head.angle,
                         length: length,
-                        path: path, // Send path for others to see
+                        path: path,
                         name: playerName,
                         color: playerColor
                     };
@@ -541,7 +592,10 @@
             }
 
             if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
-                triggerGameOver();
+                // FIX: Handle Disconnect gracefully instead of hard game over
+                ws.send(JSON.stringify({ type: 'quit' }));
+                ws.close();
+                handleNetworkError("GAME OVER", "You hit the map border.");
                 return;
             }
 
@@ -557,7 +611,6 @@
                 if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
 
                 if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
-                    // SLOWER GROWTH LOGIC:
                     const growthFactor = Math.max(0.1, 50 / length);
                     length += (f.r / 4) * currentMult * growthFactor;
 
@@ -744,8 +797,6 @@
                     killBot(i);
                     hsCount++;
                     updateStatsUI();
-                    // const audio = document.getElementById('hs-audio'); // Removed HS audio ID ref to avoid error
-                    // if (audio) { audio.currentTime = 0; audio.play().catch(() => { }); }
                     continue;
                 }
                 else if (res === 2) { triggerGameOver(); return; }
@@ -766,12 +817,8 @@
         }
 
         function updateStatsUI() {
-            // FIX: Use correct IDs 'kill-val' and 'score-val' instead of 'kill-count'
-            const killEl = document.getElementById('kill-val');
-            const scoreEl = document.getElementById('score-val');
-            
-            if (killEl) killEl.innerText = killCount;
-            if (scoreEl) scoreEl.innerText = Math.floor(length * 10);
+            document.getElementById('kill-val').innerText = killCount;
+            document.getElementById('score-val').innerText = Math.floor(length * 10);
         }
 
         function killBot(index) {
@@ -815,8 +862,44 @@
             }
 
             explodeWorm(path, playerColor);
-            document.getElementById('final-score').innerText = Math.floor(length * 10);
-            document.getElementById('game-over').style.display = 'flex';
+            
+            // Show Game Over UI
+            const overlay = document.getElementById('game-over');
+            overlay.style.display = 'flex';
+            
+            // Reset Text for Game Over
+            document.getElementById('overlay-title').innerText = "GAME OVER";
+            document.getElementById('overlay-msg').innerText = `Score: ${Math.floor(length * 10)}`;
+            
+            // Reset Buttons for Game Over
+            const btnPlay = document.getElementById('btn-play');
+            const btnHome = document.getElementById('btn-home');
+            
+            btnPlay.innerText = "PLAY AGAIN";
+            btnHome.innerText = "GO HOME";
+            
+            // Override Clicks for Game Over
+            btnPlay.onclick = () => {
+                overlay.style.display = 'none';
+                restartGame();
+            };
+            
+            btnHome.onclick = () => {
+                goHome();
+            };
+        }
+
+        function restartGame() {
+            // Ensure we are in a clean state
+            const overlay = document.getElementById('game-over');
+            overlay.style.display = 'none';
+            // Reset Buttons to Default (handled in overlay logic)
+            const btnPlay = document.getElementById('btn-play');
+            const btnHome = document.getElementById('btn-home');
+            btnPlay.innerText = "PLAY AGAIN";
+            btnHome.innerText = "GO HOME";
+            
+            connect();
         }
 
         /* ================= DRAWING / RENDERER ================= */
@@ -967,14 +1050,14 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false; // Skin logic removed for simplicity
+            const hasSkin = false; // Use skin for bots too
 
             // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, botR, 0, Math.PI*2);
                 ctx.fill();
                 if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
             }
@@ -1100,6 +1183,7 @@
             const pupilR = eyeR * 0.28;
             ctx.beginPath();
             ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI * 2);
+            ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
             ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
             ctx.fill();
 
@@ -1241,12 +1325,8 @@
             const maxR = 60;
 
             // Use Logarithmic scale so 100000 mass doesn't cover map
-            // log10(50) ~=1.7, log10(100000) ~= 5
-            // We want to map this range to minR -> maxR
-
             const base = Math.log10(Math.max(len, 50));
-            const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); // Maps len 50->500000 roughly
-
+            const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
             return minR + (maxR - minR) * t;
         }
 
@@ -1254,7 +1334,7 @@
             const myList = [...bots, ...Object.values(remotePlayers)];
             const onlineEl = document.getElementById('online-count');
             if (onlineEl) {
-                const onlineCount = bots.length + Object.keys(remotePlayers).length + (!isGameOver && isGameRunning ? 1 : 0);
+                const onlineCount = bots.length + Object.keys(remotePlayers).length;
                 onlineEl.innerText = `(${onlineCount} online)`;
             }
 
@@ -1264,8 +1344,8 @@
             const lbDiv = document.getElementById('lb-content');
             let html = '';
             myList.slice(0, 10).forEach((p, index) => {
-                const cls = (p.isMe) ? "lb-row lb-me" : "lb-row";
-                html += `<div class="${cls}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
+                const className = p.isMe ? "lb-row lb-me" : "lb-row";
+                html += `<div class="${className}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
             });
             lbDiv.innerHTML = html;
         }
@@ -1281,8 +1361,7 @@
 
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
-                // const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate)); // Removed element ref to avoid crash
-                // document.getElementById('fps-box').innerText = "FPS: " + fps; 
+                // const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
                 lastFpsUpdate = now;
                 frameCount = 0;
             }
@@ -1291,52 +1370,7 @@
             draw();
         }
 
-        // ================= GAME FLOW =================
-        
-        function handleMessage(data) {
-            if (data.type === 'init') {
-                myId = data.selfId;
-                // Hide loading/lobby
-                document.getElementById("loading-screen").style.display = "none";
-                document.getElementById("ui-layer").style.display = "block";
-                
-                initGame();
-                loop();
-            }
-            else if (data.type === 'update') {
-                // Update remote player
-                if (data.id !== myId) {
-                    remotePlayers[data.id] = data;
-                }
-            }
-            else if (data.type === 'remove') {
-                delete remotePlayers[data.id];
-            }
-            else if (data.type === 'spawn_food') {
-                if (data.food && Array.isArray(data.food)) {
-                    const now = Date.now();
-                    data.food.forEach(f => {
-                        food.push({
-                            x: f.x,
-                            y: f.y,
-                            r: f.r,
-                            color: f.color,
-                            type: 0,
-                            angle: Math.random() * Math.PI * 2,
-                            spawnTime: now,
-                            isDrops: true,
-                            noGlow: false,
-                            vx: 0, vy: 0
-                        });
-                    });
-                }
-            }
-            else if (data.type === 'die') {
-                triggerGameOver();
-            }
-        }
-
-        loop(); // Start loop immediately
+        loop();
     </script>
 </body>
 </html>
