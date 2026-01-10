@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Fixed</title>
+    <title>Wormate Clone - Fixed IDs</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -96,7 +96,6 @@
 
     <script>
         // ================= SERVER CONNECTION =================
-        // REPLACE WITH YOUR RENDER URL
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
 
         let ws = null;
@@ -116,97 +115,83 @@
             }
 
             playerName = input.value.trim() || "Player";
-            lobby.style.display = "none";
-            loadingScreen.style.display = "flex";
-
+            lobby.style.display = "none"; 
+            loadingScreen.style.display = "flex"; 
+            
             connectToServer();
         }
 
         function connectToServer() {
             try {
                 ws = new WebSocket(SERVER_URL);
-
-                ws.onopen = () => {
-                    console.log("Connected to Game Server");
+                
+                ws.onopen = () => { 
+                    console.log("Connected");
                     connectionActive = true;
-                    document.getElementById("loading-screen").style.display = "none";
-                    document.getElementById("ui-layer").style.display = "block";
+                    // Note: initGame is called when server sends 'init' message
                 };
-
+                
                 ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-
-                        if (data.type === 'init') {
-                            myId = data.selfId;
-                            document.getElementById("loading-screen").style.display = "none";
-                            document.getElementById("ui-layer").style.display = "block";
-                            initGame();
-                        }
-                        else if (data.type === 'update') {
-                            const newRemotePlayers = {};
-                            data.players.forEach(p => {
-                                if (p.id !== myId) {
-                                    newRemotePlayers[p.id] = p;
-                                }
-                            });
-                            remotePlayers = newRemotePlayers;
-                        }
-                        else if (data.type === 'remove') {
-                            delete remotePlayers[data.id];
-                        }
-                        else if (data.type === 'spawn_food') {
-                            if (data.food && Array.isArray(data.food)) {
-                                const now = Date.now();
-                                data.food.forEach(f => {
-                                    food.push({
-                                        x: f.x,
-                                        y: f.y,
-                                        r: f.r,
-                                        color: f.color,
-                                        type: 0,
-                                        angle: Math.random() * Math.PI * 2,
-                                        spawnTime: now,
-                                        isDrops: true,
-                                        noGlow: false,
-                                        vx: 0, vy: 0
-                                    });
-                                });
-                            }
-                        }
-                        else if (data.type === 'die') {
-                            triggerGameOver();
-                        }
-
-                    } catch (e) {
-                        console.error("Error parsing server message", e);
-                    }
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
                 };
-
+                
                 ws.onclose = () => {
-                    console.log("Disconnected from Server");
+                    console.log("Disconnected");
                     connectionActive = false;
                     handleDisconnection();
                 };
 
                 ws.onerror = (err) => {
-                    console.error("WebSocket Error:", err);
+                    console.error("WS Error:", err);
                     connectionActive = false;
                     handleDisconnection();
                 };
-            } catch (e) {
+                
+                setInterval(sendInput, 1000/30);
+
+            } catch(e) {
                 handleDisconnection();
             }
         }
 
+        function sendInput() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            const dx = mouse.x - canvas.width/2;
+            const dy = mouse.y - canvas.height/2;
+            const angle = Math.atan2(dy, dx);
+
+            ws.send(JSON.stringify({
+                type: 'input',
+                angle: angle,
+                boost: boosting,
+                name: entities[myId] ? entities[myId].name : "" 
+            }));
+        }
+
         function handleDisconnection() {
             if (isGameRunning) {
-                alert("Connection Lost! Returning to lobby.");
-                goHome();
+                showOverlay("CONNECTION LOST", "Please check your internet.");
             } else {
                 document.getElementById("loading-screen").style.display = "none";
                 document.getElementById("lobby").style.display = "flex";
             }
+        }
+
+        function showOverlay(title, msg) {
+            isGameRunning = false;
+            document.getElementById("game-over").style.display = "flex";
+            document.getElementById("overlay-title").innerText = title;
+            document.getElementById("overlay-msg").innerText = msg;
+            if(ws) ws.close();
+        }
+
+        function goHome() {
+            location.reload();
+        }
+        
+        function restartGame() {
+            location.reload();
         }
 
         /* ================= GLOBAL SETUP ================= */
@@ -221,8 +206,8 @@
             minimapCanvas.width = 150;
             minimapCanvas.height = 150;
         }
-        resize();
         window.addEventListener("resize", resize);
+        resize();
 
         /* ================= CONFIGURATION ================= */
         const SEGMENT_SPACING = 5;
@@ -257,7 +242,7 @@
         let food = [];
         let powerups = [];
         let killCount = 0;
-        let hsCount = 0;
+        // let hsCount = 0; // Disabled to fix error, not in HTML
         let playerIsUnder = false;
 
         let expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
@@ -330,7 +315,7 @@
             food = [];
             powerups = [];
             killCount = 0;
-            hsCount = 0;
+            // hsCount = 0;
             updateStatsUI();
 
             isGameOver = false;
@@ -346,20 +331,6 @@
             for (let i = 0; i < 120; i++) spawnPowerup();
 
             document.getElementById('game-over').style.display = 'none';
-        }
-
-        function goHome() {
-            // Explicitly QUIT
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'quit' }));
-                ws.close();
-            }
-
-            document.getElementById('game-over').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('lobby').style.display = 'flex';
-            isGameRunning = false;
         }
 
         function resetBot(bot) {
@@ -553,15 +524,15 @@
 
             // Send Data to Server
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Throttle to 20Hz for bandwidth
-                if (now % 50 < 17) {
+                // Throttle sending to every 50ms (20 times a sec) to save bandwidth
+                if (now % 50 < 17) { // Approx 20fps sending
                     const payload = {
                         type: 'update',
                         x: head.x,
                         y: head.y,
                         angle: head.angle,
                         length: length,
-                        path: path, // Send full path
+                        path: path, // Send path for others to see
                         name: playerName,
                         color: playerColor
                     };
@@ -569,7 +540,10 @@
                 }
             }
 
-            if (Math.hypot(head.x, head.y) > MAP_RADIUS) triggerGameOver();
+            if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
+                triggerGameOver();
+                return;
+            }
 
             // Food Physics + Collision
             for (let i = food.length - 1; i >= 0; i--) {
@@ -770,11 +744,8 @@
                     killBot(i);
                     hsCount++;
                     updateStatsUI();
-                    const audio = document.getElementById('hs-audio');
-                    if (audio) {
-                        audio.currentTime = 0;
-                        audio.play().catch(() => { });
-                    }
+                    // const audio = document.getElementById('hs-audio'); // Removed HS audio ID ref to avoid error
+                    // if (audio) { audio.currentTime = 0; audio.play().catch(() => { }); }
                     continue;
                 }
                 else if (res === 2) { triggerGameOver(); return; }
@@ -795,8 +766,12 @@
         }
 
         function updateStatsUI() {
-            document.getElementById('kill-count').innerText = killCount;
-            document.getElementById('hs-count').innerText = hsCount;
+            // FIX: Use correct IDs 'kill-val' and 'score-val' instead of 'kill-count'
+            const killEl = document.getElementById('kill-val');
+            const scoreEl = document.getElementById('score-val');
+            
+            if (killEl) killEl.innerText = killCount;
+            if (scoreEl) scoreEl.innerText = Math.floor(length * 10);
         }
 
         function killBot(index) {
@@ -810,7 +785,8 @@
             if (now < expiry) {
                 el.style.display = 'flex';
                 const left = Math.ceil((expiry - now) / 1000);
-                document.getElementById(timeId).innerText = left + "s";
+                const timeEl = document.getElementById(timeId);
+                if(timeEl) timeEl.innerText = left + "s";
             } else {
                 el.style.display = 'none';
             }
@@ -841,10 +817,6 @@
             explodeWorm(path, playerColor);
             document.getElementById('final-score').innerText = Math.floor(length * 10);
             document.getElementById('game-over').style.display = 'flex';
-        }
-
-        function restartGame() {
-            connect();
         }
 
         /* ================= DRAWING / RENDERER ================= */
@@ -995,13 +967,14 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false; // Use skin for bots too
+            const hasSkin = false; // Skin logic removed for simplicity
 
+            // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, botR, 0, Math.PI*2);
+                ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
                 ctx.fill();
                 if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
             }
@@ -1268,7 +1241,7 @@
             const maxR = 60;
 
             // Use Logarithmic scale so 100000 mass doesn't cover map
-            // log10(50) ~= 1.7, log10(100000) ~= 5
+            // log10(50) ~=1.7, log10(100000) ~= 5
             // We want to map this range to minR -> maxR
 
             const base = Math.log10(Math.max(len, 50));
@@ -1291,8 +1264,8 @@
             const lbDiv = document.getElementById('lb-content');
             let html = '';
             myList.slice(0, 10).forEach((p, index) => {
-                const className = p.isMe ? "lb-row lb-me" : "lb-row";
-                html += `<div class="${className}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
+                const cls = (p.isMe) ? "lb-row lb-me" : "lb-row";
+                html += `<div class="${cls}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
             });
             lbDiv.innerHTML = html;
         }
@@ -1308,8 +1281,8 @@
 
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
-                const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate));
-                // document.getElementById('fps-box').innerText = "FPS: " + fps; // Removed element to clean up
+                // const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate)); // Removed element ref to avoid crash
+                // document.getElementById('fps-box').innerText = "FPS: " + fps; 
                 lastFpsUpdate = now;
                 frameCount = 0;
             }
@@ -1318,7 +1291,52 @@
             draw();
         }
 
-        loop();
+        // ================= GAME FLOW =================
+        
+        function handleMessage(data) {
+            if (data.type === 'init') {
+                myId = data.selfId;
+                // Hide loading/lobby
+                document.getElementById("loading-screen").style.display = "none";
+                document.getElementById("ui-layer").style.display = "block";
+                
+                initGame();
+                loop();
+            }
+            else if (data.type === 'update') {
+                // Update remote player
+                if (data.id !== myId) {
+                    remotePlayers[data.id] = data;
+                }
+            }
+            else if (data.type === 'remove') {
+                delete remotePlayers[data.id];
+            }
+            else if (data.type === 'spawn_food') {
+                if (data.food && Array.isArray(data.food)) {
+                    const now = Date.now();
+                    data.food.forEach(f => {
+                        food.push({
+                            x: f.x,
+                            y: f.y,
+                            r: f.r,
+                            color: f.color,
+                            type: 0,
+                            angle: Math.random() * Math.PI * 2,
+                            spawnTime: now,
+                            isDrops: true,
+                            noGlow: false,
+                            vx: 0, vy: 0
+                        });
+                    });
+                }
+            }
+            else if (data.type === 'die') {
+                triggerGameOver();
+            }
+        }
+
+        loop(); // Start loop immediately
     </script>
 </body>
 </html>
