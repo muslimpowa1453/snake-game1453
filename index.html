@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Server Authoritative</title>
+    <title>Wormate Clone - Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -73,9 +73,9 @@
     </div>
 
     <script>
-        const SERVER_URL = "ws://localhost:10000"; 
-        // For Render deployment, change localhost to your wss url
-        // const SERVER_URL = "wss://your-app-name.onrender.com"; 
+        // AUTO-DETECT URL: Works for Localhost AND Render Deployment
+        const loc = window.location;
+        const SERVER_URL = (loc.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + loc.host;
 
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
@@ -111,10 +111,15 @@
         function connect() {
             const name = document.getElementById("nickname-input").value || "Guest";
             document.getElementById("lobby").style.display = "none";
+            document.getElementById("status-msg").innerText = "Connecting...";
             
             try {
                 ws = new WebSocket(SERVER_URL);
-                ws.onopen = () => { console.log("Connected"); };
+                
+                ws.onopen = () => { 
+                    console.log("Connected to " + SERVER_URL); 
+                    document.getElementById("status-msg").innerText = "";
+                };
                 
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
@@ -122,14 +127,14 @@
                 };
                 
                 ws.onclose = () => {
-                    alert("Disconnected from server");
+                    alert("Disconnected from server. Reloading...");
                     location.reload();
                 };
                 
                 setInterval(sendInput, 1000/30);
 
             } catch(e) {
-                alert("Connection failed");
+                alert("Connection failed: " + e.message);
                 location.reload();
             }
         }
@@ -176,7 +181,6 @@
         }
 
         function updateLocalEntities() {
-            // Interpolate Players
             serverState.players.forEach(p => {
                 if (!entities[p.id]) {
                     entities[p.id] = { ...p };
@@ -197,7 +201,6 @@
                 }
             });
 
-            // Interpolate Bots
             serverState.bots.forEach(b => {
                 if (!entities[b.id]) {
                     entities[b.id] = { ...b };
@@ -247,11 +250,9 @@
             drawGrid(camX, camY);
             drawFood();
 
-            // Draw other snakes
             for (const id in entities) {
                 if (id !== myId) drawSnake(entities[id]);
             }
-            // Draw me
             drawSnake(me, true);
 
             ctx.restore();
