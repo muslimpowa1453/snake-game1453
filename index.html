@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Fixed Connection</title>
+    <title>Wormate Clone - Render Connected</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -43,8 +43,8 @@
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-        <button class="menu-btn btn-green" onclick="startConnectionProcess()">PLAY</button>
-        <div id="status-msg" style="color:white; margin-top:10px; min-height: 20px;"></div>
+        <button class="menu-btn btn-green" onclick="startGame()">PLAY</button>
+        <div id="status-msg" style="color:white; margin-top:10px; font-size:14px; opacity:0.8;"></div>
     </div>
 
     <div id="ui-layer">
@@ -73,9 +73,11 @@
     </div>
 
     <script>
-        // Determine URL
-        const loc = window.location;
-        const SERVER_URL = (loc.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + loc.host;
+        // ========================================================
+        // HARDCODED SERVER URL (FIX)
+        // ========================================================
+        const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
+        // ========================================================
 
         const canvas = document.getElementById("game");
         const ctx = canvas.getContext("2d");
@@ -86,7 +88,7 @@
         let myId = null;
         let isGameRunning = false;
         let reconnectAttempts = 0;
-        const MAX_RETRIES = 5;
+        const MAX_RETRIES = 10;
         
         let serverState = { players: {}, bots: [], food: [] };
         let entities = {}; 
@@ -110,11 +112,10 @@
         window.addEventListener("mousedown", () => boosting = true);
         window.addEventListener("mouseup", () => boosting = false);
 
-        function startConnectionProcess() {
+        function startGame() {
             const name = document.getElementById("nickname-input").value || "Guest";
             document.getElementById("lobby").style.display = "none";
-            // Show a temporary connecting overlay or status
-            alert("Connecting to server... If this is your first visit in a while, it may take a few seconds for the server to wake up.");
+            document.getElementById("status-msg").innerText = "Connecting to Render Server...";
             connect(name);
         }
 
@@ -122,20 +123,26 @@
             reconnectAttempts++;
             const statusMsg = document.getElementById("status-msg");
             
+            // Only show status in lobby UI if we haven't started game yet
+            if(!document.getElementById("lobby").style.display || document.getElementById("lobby").style.display === 'none') {
+                 // We are in game or transition, alert instead
+            } else {
+                statusMsg.innerText = `Connecting... Attempt ${reconnectAttempts}/${MAX_RETRIES}`;
+            }
+
             try {
                 ws = new WebSocket(SERVER_URL);
                 
                 ws.onopen = () => { 
                     console.log("Connected to " + SERVER_URL); 
-                    reconnectAttempts = 0; // Reset counter
+                    reconnectAttempts = 0; 
                     statusMsg.innerText = "";
                     
-                    // Send init data
-                    const data = JSON.stringify({
-                        type: 'input',
-                        name: playerName
-                    });
-                    ws.send(data);
+                    // Hide lobby, show game if not already showing
+                    if(document.getElementById("ui-layer").style.display === 'none') {
+                        document.getElementById("ui-layer").style.display = "block";
+                        document.getElementById("lobby").style.display = "none";
+                    }
                 };
                 
                 ws.onmessage = (event) => {
@@ -147,9 +154,9 @@
                     if (!isGameRunning) {
                         console.log("Connection closed. Retrying...");
                         if (reconnectAttempts < MAX_RETRIES) {
-                            setTimeout(() => connect(playerName), 2000); // Retry after 2s
+                            setTimeout(() => connect(playerName), 2000); 
                         } else {
-                            alert("Could not connect to server after 5 attempts. Please refresh.");
+                            alert("Connection failed. The server might be asleep or down.");
                             location.reload();
                         }
                     } else {
@@ -160,7 +167,8 @@
                 };
 
                 ws.onerror = (err) => {
-                    console.error("WebSocket Error:", err);
+                    console.error("WS Error:", err);
+                    statusMsg.innerText = "Connection Error. Retrying...";
                 };
                 
                 setInterval(sendInput, 1000/30);
@@ -190,6 +198,7 @@
             if (data.type === 'init') {
                 myId = data.id;
                 document.getElementById("ui-layer").style.display = "block";
+                document.getElementById("lobby").style.display = "none";
                 isGameRunning = true;
                 
                 const name = document.getElementById("nickname-input").value;
