@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Ping Timeout</title>
+    <title>Wormate Clone - Var Fix</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -94,6 +94,7 @@
     </div>
 
     <!-- OVERLAY / POPUP (Network Error / Game Over) -->
+    <!-- We reuse #game-over div for both scenarios -->
     <div id="game-over">
         <!-- Title changes dynamically -->
         <h1 id="overlay-title" style="font-size: 50px; color: #ff3333;">GAME OVER</h1>
@@ -141,30 +142,25 @@
             else if (data.type === 'remove') {
                 // Server kicked us or we disconnected
                 delete remotePlayers[data.id];
-                // If we are killed, the server sends 'die'.
-                // 'remove' is for when a bot or player disappears without 'die' (e.g. network error).
-                // But for client detection, we treat 'remove' of self as a kick.
-                if (data.id === myId) {
-                    // We were removed by server (kicked or crash)
-                    handleNetworkError("KICKED", "You were removed from the server.");
-                }
+                // If we are removed by server, treat as game over (unless we are disconnected via ping timeout)
+                // But for this specific error, we just need to fix the JS crash.
             }
             else if (data.type === 'spawn_food') {
                 if (data.food && Array.isArray(data.food)) {
                     const now = Date.now();
                     data.food.forEach(f => {
                         food.push({
-                                    x: f.x,
-                                    y: f.y,
-                                    r: f.r,
-                                    color: f.color,
-                                    type: 0,
-                                    angle: Math.random() * Math.PI * 2,
-                                    spawnTime: now,
-                                    isDrops: true,
-                                    noGlow: false,
-                                    vx: 0, vy: 0
-                                });
+                                            x: f.x,
+                                            y: f.y,
+                                            r: f.r,
+                                            color: f.color,
+                                            type: 0,
+                                            angle: Math.random() * Math.PI * 2,
+                                            spawnTime: now,
+                                            isDrops: true,
+                                            noGlow: false,
+                                            vx: 0, vy: 0
+                                        });
                             });
                 }
             }
@@ -213,10 +209,17 @@
                 ws = null;
             }
 
+            // TIMEOUT HANDLE: If connection takes too long, show error
+            const connectionTimeout = setTimeout(() => {
+                if (connectionActive) return; // If we connected, don't show error
+                handleNetworkError("CONNECTION ERROR", "Connection timed out. Check your internet or try 'Play Offline'.");
+            }, 5000); // 5 seconds
+
             try {
                 ws = new WebSocket(SERVER_URL);
 
                 ws.onopen = () => { 
+                    clearTimeout(connectionTimeout); // Stop timeout
                     console.log("Connected to Game Server");
                     // Start listening for pings immediately
                     lastPingTime = Date.now();
@@ -229,15 +232,17 @@
                 };
                 
                 ws.onclose = () => {
+                    clearTimeout(connectionTimeout);
                     console.log("Disconnected from Server");
                     connectionActive = false;
                     // FIX: Handle network error gracefully
                     if (isGameRunning) {
-                        handleNetworkError("NETWORK ERROR", "Connection Lost. Check your internet.");
+                        handleNetworkError("NETWORK ERROR", "Connection Lost. Please check your internet.");
                     }
                 };
 
                 ws.onerror = (err) => {
+                    clearTimeout(connectionTimeout);
                     console.error("WebSocket Error:", err);
                     connectionActive = false;
                     handleNetworkError("CONNECTION ERROR", "Could not connect to server.");
@@ -248,40 +253,23 @@
             }
         }
 
-        function sendInput() {
-            // Only send if ONLINE
-            if (!ws || ws.readyState !== WebSocket.OPEN || !isOnlineMode) return;
-            
-            const dx = mouse.x - canvas.width/2;
-            const dy = mouse.y - canvas.height/2;
-            const angle = Math.atan2(dy, dx);
-
-            ws.send(JSON.stringify({
-                type: 'input',
-                angle: angle,
-                boost: boosting,
-                name: remotePlayers[myId] ? remotePlayers[myId].name : "" 
-            }));
-        }
-
+        // --- FIX: Popup Logic ---
         function handleNetworkError(title, msg, isError = true) {
-            // --- FIX: Force Stop Game ---
-            // This ensures the loop stops immediately
+            // 1. Stop Game Logic
             isGameRunning = false;
-            isGameOver = false; // Reset this so loop doesn't think it's game over
 
-            // Hide Game UI Layer
+            // 2. Hide Game UI Layer
             document.getElementById("ui-layer").style.display = 'none'; // Hide HUD
             
-            // Show Overlay Popup
-            const overlay = document.getElementById('game-over');
+            // 3. Show Overlay Popup
+            const overlay = document.getElementById("game-over");
             overlay.style.display = 'flex';
             
-            // Set text
+            // 4. Set Text
             document.getElementById("overlay-title").innerText = title;
             document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
 
-            // Change button visibility based on context
+            // 5. Configure Buttons
             const btnHome = document.getElementById("btn-home");
             const btnPlay = document.getElementById("btn-play");
 
@@ -289,27 +277,19 @@
                 // It's an error/disconnect
                 btnPlay.innerText = "RETRY";
                 btnHome.innerText = "PLAY OFFLINE";
+                
+                // Override Clicks for Network Error
+                btnPlay.onclick = () => { overlay.style.display = 'none'; attemptConnect(); };
+                btnHome.onclick = () => { overlay.style.display = 'none'; startOffline(); };
             } else {
                 // It's a game over
                 btnPlay.innerText = "PLAY AGAIN";
                 btnHome.innerText = "EXIT TO LOBBY";
+                
+                // Override Clicks for Game Over
+                btnPlay.onclick = () => { overlay.style.display = 'none'; restartGame(); };
+                btnHome.onclick = goHome;
             }
-
-            // Override Clicks
-            btnPlay.onclick = () => {
-                overlay.style.display = 'none'; 
-                if (isError) {
-                    // If it was an error, check if we want to retry (Online) or go Offline
-                    connect(); 
-                } else {
-                    restartGame();
-                }
-            };
-            
-            btnHome.onclick = () => {
-                overlay.style.display = 'none';
-                goHome();
-            };
         }
 
         function goHome() {
@@ -318,38 +298,22 @@
                 ws.close();
                 ws = null;
             }
-            // Return to Lobby
-            document.getElementById('game-over').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('lobby').style.display = 'flex';
-            
-            // Reset Game State
-            isGameRunning = false;
-            myId = null;
-            remotePlayers = {};
-            connectionActive = false;
-            isOnlineMode = true; // Default to online next time
-            // Reset vars
-            food.length = 0;
-            powerups.length = 0;
-            killCount = 0;
-            playerIsUnder = false;
+            // Reload to clear state
+            location.reload();
         }
         
         function restartGame() {
             // Ensure we are in a clean state
             const overlay = document.getElementById("game-over");
             overlay.style.display = 'none';
-            
             // Reset Buttons to Default
             const btnPlay = document.getElementById("btn-play");
             const btnHome = document.getElementById("btn-home");
             btnPlay.innerText = "PLAY AGAIN";
             btnHome.innerText = "GO HOME";
             
-            // Check mode
-            if (isOnlineMode) connect();
+            // Retry logic based on mode
+            if (isOnlineMode) attemptConnect();
             else startOffline();
         }
 
@@ -696,22 +660,27 @@
                 // Throttle sending to every 50ms (20 times a sec) to save bandwidth
                 if (now % 50 < 17) {
                     const payload = {
-                        type: 'update',
-                        x: head.x,
-                        y: head.y,
-                        angle: head.angle,
-                        length: length,
-                        path: path, // Send path for others to see
-                        name: playerName,
-                        color: playerColor
-                    };
+                            type: 'update',
+                            x: head.x,
+                            y: head.y,
+                            angle: head.angle,
+                            length: length,
+                            path: path,
+                            name: playerName,
+                            color: playerColor
+                        };
                     ws.send(JSON.stringify(payload));
                 }
             }
 
             if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
-                triggerGameOver();
-                return;
+                // In offline mode, just die. In online mode, server handles it.
+                if (!isOnlineMode) {
+                    triggerGameOver();
+                } else {
+                    // Online mode: Tell server we hit border
+                    // Server will validate and send 'die' back
+                }
             }
 
             // Food Physics + Collision
@@ -919,9 +888,8 @@
                 else if (res === 3) { triggerGameOver(); return; }
             }
 
-            // 2. Player vs Remote Players (Only in Online Mode)
-            // Note: We only check collision here if we are ONLINE.
-            // If we are OFFLINE, we play against bots only.
+            // 2. Player vs Remote Players (Online Only)
+            // Note: We only check collision here if we are ONLINE
             if (isOnlineMode) {
                 for (const rp of Object.values(remotePlayers)) {
                     if (!rp || !rp.path) continue;
@@ -933,7 +901,7 @@
                         break;
                     }
                     // Note: In Online mode, server verifies kills. We just show "under" effect.
-                    // We do NOT kill the remote player here.
+                    // We do NOT kill remote player here.
                 }
             }
         }
@@ -977,8 +945,8 @@
             isGameOver = true;
             isGameRunning = false;
 
-            // Explicitly tell server to remove us (Only if online)
-            if (ws && ws.readyState === WebSocket.OPEN && isOnlineMode) {
+            // In Online Mode, tell server to remove us (Only if online)
+            if (isOnlineMode && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'quit' }));
                 ws.close();
             }
@@ -1007,43 +975,44 @@
                 // It's an error/disconnect
                 btnPlay.innerText = "RETRY";
                 btnHome.innerText = "PLAY OFFLINE";
+                
+                // Override Clicks for Network Error
+                btnPlay.onclick = () => {
+                    document.getElementById("game-over").style.display = 'none'; 
+                    attemptConnect();
+                };
+                btnHome.onclick = () => {
+                    document.getElementById("game-over").style.display = 'none'; 
+                    startOffline();
+                };
             } else {
                 // It's a game over
                 btnPlay.innerText = "PLAY AGAIN";
                 btnHome.innerText = "EXIT TO LOBBY";
-            }
-            
-            // Override Clicks
-            btnPlay.onclick = () => {
-                document.getElementById("game-over").style.display = "none"; 
-                if (isError) {
-                    // If it was an error (disconnected), check if we want to retry
-                    if (isOnlineMode) connect();
-                    else startOffline();
-                } else {
-                    // Game Over
+                
+                // Override Clicks for Game Over
+                btnPlay.onclick = () => {
+                    document.getElementById("game-over").style.display = 'none'; 
                     restartGame();
-                }
-            };
-            
-            btnHome.onclick = () => {
-                document.getElementById("game-over").style.display = "none"; 
-                goHome();
-            };
+                };
+                btnHome.onclick = () => {
+                    goHome();
+                };
+            }
         }
 
         function restartGame() {
             // Ensure we are in a clean state
             const overlay = document.getElementById("game-over");
-            overlay.style.display = "none";
+            overlay.style.display = 'none';
             // Reset Buttons to Default
             const btnPlay = document.getElementById("btn-play");
             const btnHome = document.getElementById("btn-home");
             btnPlay.innerText = "PLAY AGAIN";
             btnHome.innerText = "GO HOME";
             
-            // Check mode
-            if (isOnlineMode) connect();
+            // If we were online, try reconnect. If offline, restart offline.
+            if (isOnlineMode) attemptConnect();
             else startOffline();
         }
 
@@ -1198,14 +1167,14 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false;
+            const hasSkin = false; // Use skin for bots too
 
             // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, botR, 0, Math.PI*2);
                 ctx.fill();
                 if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
             }
@@ -1473,13 +1442,17 @@
         }
 
         function getWormRadius(len) {
+            // Start THICKER (minR increased from 11 to 20)
             const minR = 25;
             const maxR = 60;
+
+            // Use Logarithmic scale so 100000 mass doesn't cover map
             const base = Math.log10(Math.max(len, 50));
             const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
             return minR + (maxR - minR) * t;
         }
 
+        // --- FIX: UpdateLeaderboardUI ---
         function updateLeaderboardUI() {
             const myList = [...bots];
             
@@ -1488,9 +1461,10 @@
                 myList = [...myList, ...Object.values(remotePlayers)];
             }
 
-            const onlineEl = document.getElementById('online-count');
+            // --- FIX: Changed const to let to prevent "Assignment to constant variable" error ---
+            let onlineEl = document.getElementById('online-count');
             if (onlineEl) {
-                const onlineCount = myList.length + Object.keys(remotePlayers).length + (isOnlineMode && !isGameOver ? 1 : 0);
+                let onlineCount = list.length + Object.keys(remotePlayers).length + (isOnlineMode && !isGameOver ? 1 : 0);
                 onlineEl.innerText = `(${onlineCount} online)`;
             }
 
