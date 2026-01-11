@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Strict Online</title>
+    <title>Wormate Clone - Safe FPS</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -14,7 +14,7 @@
         #minimap-container { position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.5); border-radius: 50%; border: 3px solid #333; overflow: hidden; }
         #minimap { width: 100%; height: 100%; }
 
-        /* STATS (Updated Line) */
+        /* STATS */
         #stats-ui { 
             position: absolute; top: 180px; left: 20px; 
             color: white; font-size: 16px; font-weight: bold; 
@@ -72,7 +72,7 @@
         <h2 style="color:white; margin-top:20px;">Connecting to Server...</h2>
     </div>
 
-    <!-- LOBBY (NO OFFLINE MODE) -->
+    <!-- LOBBY -->
     <div id="lobby">
         <h1>WORMATE CLONE</h1>
         <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
@@ -133,7 +133,7 @@
         let lastPingTime = Date.now();
         const PING_TIMEOUT = 5000; // 5 seconds
         let connectionActive = false;
-        let isOnlineMode = true; // ALWAYS TRUE NOW
+        let isOnlineMode = true;
 
         function handleMessage(data) {
             if (data.type === 'init') {
@@ -160,17 +160,18 @@
                     const now = Date.now();
                     data.food.forEach(f => {
                         food.push({
-                            x: f.x,
-                            y: f.y,
-                            r: f.r,
-                            color: f.color,
-                            type: 0,
-                            angle: Math.random() * Math.PI * 2,
-                            spawnTime: now,
-                            isDrops: true,
-                            noGlow: false,
-                            vx: 0, vy: 0
-                        });
+                                            x: f.x,
+                                            y: f.y,
+                                            r: f.r,
+                                            color: f.color,
+                                            type: 0,
+                                            angle: Math.random() * Math.PI * 2,
+                                            spawnTime: now,
+                                            isDrops: true,
+                                            noGlow: false,
+                                            vx: 0, vy: 0
+                                        });
+                            });
                     });
                 }
             }
@@ -184,6 +185,7 @@
         }
 
         function attemptConnect() {
+            isOnlineMode = true;
             const loadingScreen = document.getElementById("loading-screen");
             const lobby = document.getElementById("lobby");
             const input = document.getElementById("nickname-input");
@@ -200,6 +202,14 @@
             connectToServer();
         }
 
+        function startOffline() {
+            isOnlineMode = false;
+            document.getElementById("loading-screen").style.display = "none";
+            document.getElementById("ui-layer").style.display = "block";
+            document.getElementById("lobby").style.display = "none";
+            initGame();
+        }
+
         function connectToServer() {
             if (ws) {
                 ws.close();
@@ -209,8 +219,7 @@
             // TIMEOUT HANDLE
             const connectionTimeout = setTimeout(() => {
                 if (connectionActive) return;
-                // STRICT KICK: If connection fails, show error immediately
-                handleNetworkError("NETWORK ERROR", "Connection failed. Check internet.");
+                handleNetworkError("NETWORK ERROR", "Connection timed out. Check your internet or try 'Play Offline'.");
             }, 5000);
 
             try {
@@ -232,9 +241,8 @@
                     clearTimeout(connectionTimeout);
                     console.log("Disconnected from Server");
                     connectionActive = false;
-                    // STRICT KICK: If connection drops, show error immediately
                     if (isGameRunning) {
-                        handleNetworkError("CONNECTION LOST", "You were disconnected.");
+                        handleNetworkError("NETWORK ERROR", "Connection Lost. Please check your internet.");
                     }
                 };
 
@@ -250,14 +258,14 @@
             }
         }
 
-        // --- NEW: HandleMessage defined here to be Global ---
+        // --- FIX: HandleMessage defined here to be Global ---
         function handleNetworkError(title, msg, isError = true) {
-            // 1. Stop Game Logic (STRICT KICK)
+            // 1. Stop Game Logic
             isGameRunning = false;
             isGameOver = false;
 
             // 2. Hide Game UI Layer
-            document.getElementById("ui-layer").style.display = 'none'; 
+            document.getElementById("ui-layer").style.display = 'none'; // Hide HUD
             
             // 3. Show Overlay Popup
             const overlay = document.getElementById('game-over');
@@ -274,13 +282,13 @@
             if (isError) {
                 // It's an error/disconnect
                 btnPlay.innerText = "RETRY";
-                btnHome.innerText = "EXIT TO LOBBY";
+                btnHome.innerText = "PLAY OFFLINE";
             } else {
                 // It's a game over
                 btnPlay.innerText = "PLAY AGAIN";
                 btnHome.innerText = "EXIT TO LOBBY";
             }
-            
+
             // Override Clicks
             btnPlay.onclick = () => { 
                 document.getElementById("game-over").style.display = 'none'; 
@@ -289,7 +297,7 @@
             
             btnHome.onclick = () => {
                 document.getElementById("game-over").style.display = 'none'; 
-                goHome();
+                startOffline();
             };
         }
 
@@ -304,7 +312,16 @@
         function restartGame() {
             const overlay = document.getElementById("game-over");
             overlay.style.display = 'none';
-            attemptConnect();
+            
+            // Reset Buttons to Default
+            const btnPlay = document.getElementById("btn-play");
+            const btnHome = document.getElementById("btn-home");
+            btnPlay.innerText = "PLAY AGAIN";
+            btnHome.innerText = "GO HOME";
+            
+            // Retry logic based on mode
+            if (isOnlineMode) attemptConnect();
+            else startOffline();
         }
 
         /* ================= GLOBAL SETUP ================= */
@@ -341,7 +358,6 @@
         const COLLISION_OVER_RATIO = 1.00;
 
         // --- INERTIA CONFIGURATION ---
-        // Makes the worm coast when you tab out
         const INERTIA_FRICTION = 0.995; // Very low friction (long coast)
         const INPUT_TIMEOUT = 500; // How long before friction applies
 
@@ -691,7 +707,7 @@
             }
 
             // Send Data to Server
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (ws && ws.readyState === WebSocket.OPEN && isOnlineMode) {
                 // Throttle sending to every 50ms (20 times a sec) to save bandwidth
                 if (now % 50 < 17) {
                     const payload = {
@@ -931,6 +947,7 @@
             }
 
             // 2. Player vs Remote Players
+            // Note: We only check collision here if we are ONLINE
             if (isOnlineMode) {
                 for (const rp of Object.values(remotePlayers)) {
                     if (!rp || !rp.path) continue;
@@ -942,7 +959,6 @@
                         break;
                     }
                     // Note: We don't check kill logic for remote vs local here to avoid desync.
-                    // Server handles it.
                 }
             }
         }
@@ -977,7 +993,7 @@
             if (type === '2x') expiries.x2 = now + 120000; // 120s
             if (type === '5x') expiries.x5 = now + 40000;  // 40s
             if (type === '10x') expiries.x10 = now + 20000; // 20s
-            if (type === 'ae') expiries.ae = now + 40000;  // 40s (Cutting Edge)
+            if (type === 'ae') expiries.ae = now + 40000; // 40s (Cutting Edge)
             if (type === 'spd') expiries.spd = now + 20000; // 20s
         }
 
@@ -993,6 +1009,8 @@
                 ws.close();
             }
 
+            explodeWorm(path, playerColor);
+            
             // Show Game Over UI (Only after we are removed/kicked)
             const score = Math.floor(length * 10);
             showOverlay("GAME OVER", `Score: ${score}`);
@@ -1014,7 +1032,7 @@
             if (isError) {
                 // It's an error/disconnect
                 btnPlay.innerText = "RETRY";
-                btnHome.innerText = "EXIT TO LOBBY";
+                btnHome.innerText = "PLAY OFFLINE";
             } else {
                 // It's a game over
                 btnPlay.innerText = "PLAY AGAIN";
@@ -1022,7 +1040,7 @@
             }
             
             // Override Clicks
-            btnPlay.onclick = () => {
+            btnPlay.onclick = () => { 
                 document.getElementById("game-over").style.display = "none"; 
                 attemptConnect();
             };
@@ -1155,6 +1173,7 @@
         }
 
         function drawRemotePlayers(visibleW, visibleH) {
+            // Only draw remote players if we are ONLINE
             if (isOnlineMode) {
                 Object.values(remotePlayers).forEach(p => {
                     drawGenericSnake(p, visibleW, visibleH);
@@ -1178,7 +1197,6 @@
             const pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
 
             // RANK LOGIC: Only show rank 1-10
-            // Check bot's rank to decide if we draw text
             let botRank = 1;
             // (In a real game, you'd calculate rank from leaderboard, but here we can just do a quick check against my length)
             if (bot.score > Math.floor(length * 10)) botRank++;
@@ -1196,6 +1214,9 @@
             }
 
             // MAIN BODY DRAW
+            const hasSkin = false; // Use skin for bots too
+
+            // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
@@ -1205,14 +1226,6 @@
                 if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
             }
 
-            // RANK TEXT
-            if (botRank > 0) {
-                ctx.fillStyle = "#FFD700"; // Gold
-                ctx.font = "bold 12px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText(`#${botRank}`, bot.x, bot.y - 15);
-            }
-
             // Head
             ctx.fillStyle = bot.color;
             ctx.beginPath();
@@ -1220,6 +1233,14 @@
             ctx.fill();
 
             drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
+
+            // RANK TEXT
+            if (botRank > 0) {
+                ctx.fillStyle = "#FFD700"; // Gold
+                ctx.font = "bold 12px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(`#${botRank}`, bot.x, bot.y - 15);
+            }
 
             if (distB < 900) {
                 ctx.fillStyle = "white";
@@ -1235,20 +1256,6 @@
                 const underTint = playerIsUnder ? 0.92 : 1.0;
                 ctx.globalAlpha = underTint;
 
-                // HEADSHOT EFFECT
-                if (isHeadshotActive) {
-                    ctx.fillStyle = "rgba(255, 215, 0, 0.5)"; // Gold glow
-                    ctx.beginPath();
-                    ctx.arc(head.x, head.y, playerR * 1.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    ctx.fillStyle = "white";
-                    ctx.font = "bold 16px Arial";
-                    ctx.textAlign = "center";
-                    ctx.fillText("HEADSHOT", head.x, head.y);
-                    ctx.globalAlpha = 0.5; // Fade body slightly
-                }
-
                 const pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
 
                 // Determine segments (Under vs Over)
@@ -1261,6 +1268,7 @@
                 for (let i = 0; i < pointsToDraw.length; i++) {
                     const p = pointsToDraw[i];
                     let under = false;
+                    // Optimization: Distance check
                     for (const e of enemies) {
                         if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
                             if (isPointUnderWorm(p.x, p.y, e)) {
@@ -1447,7 +1455,6 @@
             const centerY = 75;
 
             // RANK LOGIC FOR MINIMAP: Only draw rank text for top 10
-            // Re-calculate logic
             const playerScore = Math.floor(length * 10);
             let myRank = 1;
             // Simple loop to check bots higher than me
@@ -1528,6 +1535,7 @@
             // RANK LOGIC FOR LEADERBOARD
             const myList = [...bots];
             
+            // Add Remote Players to Leaderboard if ONLINE
             if (isOnlineMode) {
                 myList = [...myList, ...Object.values(remotePlayers)];
             }
@@ -1535,7 +1543,7 @@
             // Sort by score
             myList.sort((a, b) => b.score - a.score);
 
-            // Add me and calculate rank
+            // Add me and calculate rank locally for UI text (not for list sorting)
             const playerScore = Math.floor(length * 10);
             const myEntry = { name: playerName || "You", score: playerScore, isMe: true };
             
@@ -1544,7 +1552,6 @@
             for (let i = 0; i < myList.length; i++) {
                 if (myList[i].score > playerScore) myRenderRank++;
             }
-
             // Inject my rank into myEntry for UI logic
             myEntry.renderRank = myRenderRank;
 
@@ -1553,16 +1560,8 @@
             
             // Generate HTML
             myList.slice(0, 10).forEach((p, index) => {
-                // If player (who is first index because we unshift/push? No, we just add and sort)
-                // Actually, we add me to list then sort.
-                // Let's just use the index from the sorted list + 1 because we added me last
-                // Wait, sorting order changed.
-                // Let's find index of 'You' entry if it exists in list, else default to 10
-                let lbIndex = myList.indexOf(p);
-                if (lbIndex === -1) lbIndex = index + 1;
-
                 // Logic: Top 10 ranks (1, 2, ... 10)
-                const rankText = (lbIndex < 10) ? `#${lbIndex}` : ""; // Only 1-10
+                const rankText = (index < 10) ? `#${index + 1}` : ""; // Only 1-10
 
                 const className = p.isMe ? "lb-row lb-me" : "lb-row";
                 html += `<div class="${className}"><span>${rankText} ${p.name}</span><span>${p.score}</span></div>`;
@@ -1590,7 +1589,13 @@
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
                 const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate)); 
-                document.getElementById("fps-counter").innerText = `FPS: ${fps}`;
+                
+                // --- FIX: Safe DOM Access for FPS ---
+                const fpsEl = document.getElementById("fps-counter");
+                if (fpsEl) {
+                    fpsEl.textContent = `FPS: ${fps}`;
+                }
+                
                 lastFpsUpdate = now;
                 frameCount = 0;
             }
