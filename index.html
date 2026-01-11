@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Var Fix</title>
+    <title>Wormate Clone - Variable Fix</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -94,9 +94,7 @@
     </div>
 
     <!-- OVERLAY / POPUP (Network Error / Game Over) -->
-    <!-- We reuse #game-over div for both scenarios -->
     <div id="game-over">
-        <!-- Title changes dynamically -->
         <h1 id="overlay-title" style="font-size: 50px; color: #ff3333;">GAME OVER</h1>
         <p id="overlay-msg" style="font-size: 24px;">Length: <span id="final-score" style="color: #ffd700;">0</span></p>
         <div class="btn-group">
@@ -105,27 +103,19 @@
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!--               GAME.JS                      -->
-    <!-- ========================================== -->
     <script>
         // ================= SERVER CONNECTION =================
-        // REPLACE WITH YOUR RENDER URL
         const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
         
         let ws = null;
         let myId = null;
         let remotePlayers = {}; 
         
-        // --- PING TIMEOUT CONFIGURATION ---
         let lastPingTime = Date.now();
-        const PING_TIMEOUT = 5000; // 5 seconds. If no ping for 5s, disconnect.
+        const PING_TIMEOUT = 5000;
         let connectionActive = false;
-
-        // --- GLOBAL MODE ---
         let isOnlineMode = true;
 
-        // --- FIX: HandleMessage defined here to be Global ---
         function handleMessage(data) {
             if (data.type === 'init') {
                 myId = data.selfId;
@@ -134,20 +124,16 @@
                 initGame();
             }
             else if (data.type === 'update') {
-                // Update remote player
                 if (data.id !== myId) {
                     remotePlayers[data.id] = data;
                 }
             }
             else if (data.type === 'remove') {
-                // Server kicked us or we disconnected
                 delete remotePlayers[data.id];
-                // If we are removed by server, treat as game over (unless we are disconnected via ping timeout)
-                // But for this specific error, we just need to fix the JS crash.
             }
             else if (data.type === 'spawn_food') {
                 if (data.food && Array.isArray(data.food)) {
-                    const now = Date.now();
+                    let now = Date.now();
                     data.food.forEach(f => {
                         food.push({
                                             x: f.x,
@@ -165,7 +151,6 @@
                 }
             }
             else if (data.type === 'ping') {
-                // Server is alive!
                 lastPingTime = Date.now();
                 connectionActive = true;
             }
@@ -175,10 +160,10 @@
         }
 
         function attemptConnect() {
-            isOnlineMode = true; // Set mode
-            const loadingScreen = document.getElementById("loading-screen");
-            const lobby = document.getElementById("lobby");
-            const input = document.getElementById("nickname-input");
+            isOnlineMode = true;
+            let loadingScreen = document.getElementById("loading-screen");
+            let lobby = document.getElementById("lobby");
+            let input = document.getElementById("nickname-input");
             
             if (!loadingScreen || !lobby || !input) {
                 console.error("HTML Elements missing");
@@ -193,41 +178,36 @@
         }
 
         function startOffline() {
-            isOnlineMode = false; // Set mode
+            isOnlineMode = false;
             document.getElementById("loading-screen").style.display = "none";
             document.getElementById("ui-layer").style.display = "block";
             document.getElementById("lobby").style.display = "none";
-            
-            // No WebSocket, just init game
             initGame();
         }
 
         function connectToServer() {
-            // FIX: Close any existing socket before creating new one
             if (ws) {
                 ws.close();
                 ws = null;
             }
 
-            // TIMEOUT HANDLE: If connection takes too long, show error
-            const connectionTimeout = setTimeout(() => {
-                if (connectionActive) return; // If we connected, don't show error
+            let connectionTimeout = setTimeout(() => {
+                if (connectionActive) return;
                 handleNetworkError("CONNECTION ERROR", "Connection timed out. Check your internet or try 'Play Offline'.");
-            }, 5000); // 5 seconds
+            }, 5000);
 
             try {
                 ws = new WebSocket(SERVER_URL);
 
                 ws.onopen = () => { 
-                    clearTimeout(connectionTimeout); // Stop timeout
+                    clearTimeout(connectionTimeout);
                     console.log("Connected to Game Server");
-                    // Start listening for pings immediately
                     lastPingTime = Date.now();
                     connectionActive = true;
                 };
                 
                 ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
+                    let data = JSON.parse(event.data);
                     handleMessage(data);
                 };
                 
@@ -235,7 +215,6 @@
                     clearTimeout(connectionTimeout);
                     console.log("Disconnected from Server");
                     connectionActive = false;
-                    // FIX: Handle network error gracefully
                     if (isGameRunning) {
                         handleNetworkError("NETWORK ERROR", "Connection Lost. Please check your internet.");
                     }
@@ -253,75 +232,57 @@
             }
         }
 
-        // --- FIX: Popup Logic ---
         function handleNetworkError(title, msg, isError = true) {
-            // 1. Stop Game Logic
             isGameRunning = false;
-
-            // 2. Hide Game UI Layer
-            document.getElementById("ui-layer").style.display = 'none'; // Hide HUD
+            document.getElementById("ui-layer").style.display = 'none';
             
-            // 3. Show Overlay Popup
-            const overlay = document.getElementById("game-over");
+            let overlay = document.getElementById('game-over');
             overlay.style.display = 'flex';
             
-            // 4. Set Text
             document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
+            document.getElementById("overlay-msg").innerHTML = msg; 
 
-            // 5. Configure Buttons
-            const btnHome = document.getElementById("btn-home");
-            const btnPlay = document.getElementById("btn-play");
+            let elBtnHome = document.getElementById("btn-home");
+            let elBtnPlay = document.getElementById("btn-play");
 
             if (isError) {
-                // It's an error/disconnect
-                btnPlay.innerText = "RETRY";
-                btnHome.innerText = "PLAY OFFLINE";
-                
-                // Override Clicks for Network Error
-                btnPlay.onclick = () => { overlay.style.display = 'none'; attemptConnect(); };
-                btnHome.onclick = () => { overlay.style.display = 'none'; startOffline(); };
+                elBtnPlay.innerText = "RETRY";
+                elBtnHome.innerText = "PLAY OFFLINE";
             } else {
-                // It's a game over
-                btnPlay.innerText = "PLAY AGAIN";
-                btnHome.innerText = "EXIT TO LOBBY";
-                
-                // Override Clicks for Game Over
-                btnPlay.onclick = () => { overlay.style.display = 'none'; restartGame(); };
-                btnHome.onclick = goHome;
+                elBtnPlay.innerText = "PLAY AGAIN";
+                elBtnHome.innerText = "EXIT TO LOBBY";
             }
+
+            elBtnPlay.onclick = () => { overlay.style.display = 'none'; attemptConnect(); };
+            elBtnHome.onclick = () => { overlay.style.display = 'none'; startOffline(); };
         }
 
         function goHome() {
-            // Clean up socket if exists
             if (ws) {
                 ws.close();
                 ws = null;
             }
-            // Reload to clear state
             location.reload();
         }
         
         function restartGame() {
-            // Ensure we are in a clean state
-            const overlay = document.getElementById("game-over");
+            let overlay = document.getElementById("game-over");
             overlay.style.display = 'none';
-            // Reset Buttons to Default
-            const btnPlay = document.getElementById("btn-play");
-            const btnHome = document.getElementById("btn-home");
-            btnPlay.innerText = "PLAY AGAIN";
-            btnHome.innerText = "GO HOME";
             
-            // Retry logic based on mode
+            let elBtnPlay = document.getElementById("btn-play");
+            let elBtnHome = document.getElementById("btn-home");
+            elBtnPlay.innerText = "PLAY AGAIN";
+            elBtnHome.innerText = "GO HOME";
+            
             if (isOnlineMode) attemptConnect();
             else startOffline();
         }
 
         /* ================= GLOBAL SETUP ================= */
-        const canvas = document.getElementById("game");
-        const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-        const minimapCanvas = document.getElementById("minimap");
-        const miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
+        let canvas = document.getElementById("game");
+        let ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+        let minimapCanvas = document.getElementById("minimap");
+        let miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
 
         function resize() {
             canvas.width = window.innerWidth;
@@ -341,7 +302,6 @@
         const MANUAL_BOOST_ADD = 2.2;
         const POWERUP_SPEED_MULT = 1.5;
 
-        // Turning Physics
         const TURN_SPEED_WIDE = 0.075;
         const TURN_SPEED_BOOST = 0.12;
         const TURN_SPEED_SHARP = 0.18;
@@ -374,8 +334,7 @@
         let frameCount = 0;
         let lastFpsUpdate = 0;
 
-        const BOT_COUNT = 25;
-        let bots = Array.from({ length: BOT_COUNT }, (_, i) => ({
+        let bots = Array.from({ length: 25 }, (_, i) => ({
             name: `Bot_${String(i + 1).padStart(3, '0')}`,
             score: 0,
             x: 0, y: 0,
@@ -397,7 +356,7 @@
         window.addEventListener("mouseup", () => boosting = false);
 
         window.addEventListener("wheel", e => {
-            const zoomSpeed = 0.001;
+            let zoomSpeed = 0.001;
             zoom -= e.deltaY * zoomSpeed;
             if (zoom < 0.3) zoom = 0.3;
             if (zoom > 1.5) zoom = 1.5;
@@ -410,7 +369,6 @@
             powerups.length = 0;
             bots.forEach(resetBot);
 
-            // RANDOM SAFE SPAWN LOGIC
             let safe = false;
             let attempts = 0;
             let startX = 0, startY = 0;
@@ -438,7 +396,6 @@
             food = [];
             powerups = [];
             killCount = 0;
-            // hsCount = 0;
             updateStatsUI();
 
             isGameOver = false;
@@ -472,9 +429,9 @@
 
         /* ================= ENTITY MANAGEMENT ================= */
         function spawnFood(x, y, val, colorOverride) {
-            const type = Math.floor(Math.random() * 3);
+            let type = Math.floor(Math.random() * 3);
             let r = val || (7 + Math.random() * 3);
-            const now = Date.now();
+            let now = Date.now();
 
             if (x !== undefined && y !== undefined) {
                 food.push({
@@ -491,8 +448,8 @@
                 return;
             }
 
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.sqrt(Math.random()) * (MAP_RADIUS - 50);
+            let angle = Math.random() * Math.PI * 2;
+            let dist = Math.sqrt(Math.random()) * (MAP_RADIUS - 50);
             food.push({
                 x: Math.cos(angle) * dist, y: Math.sin(angle) * dist,
                 r: r,
@@ -506,10 +463,10 @@
         }
 
         function spawnPowerup() {
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(Math.random()) * (MAP_RADIUS - 100);
-            const types = ['2x', '5x', '10x', 'ae', 'spd'];
-            const type = types[Math.floor(Math.random() * types.length)];
+            let angle = Math.random() * Math.PI * 2;
+            let r = Math.sqrt(Math.random()) * (MAP_RADIUS - 100);
+            let types = ['2x', '5x', '10x', 'ae', 'spd'];
+            let type = types[Math.floor(Math.random() * types.length)];
             let color = '#fff', label = type;
 
             if (type === '2x') color = '#ff9900';
@@ -526,20 +483,20 @@
         }
 
         function getRenderedBodyPoints(path, headX, headY, maxLen) {
-            const smooth = path;
-            const h = { x: headX, y: headY };
+            let smooth = path;
+            let h = { x: headX, y: headY };
 
-            const points = [];
+            let points = [];
             let dist = 0;
             let target = SEGMENT_SPACING;
             let prev = h;
 
             for (let i = smooth.length - 1; i >= 0; i--) {
-                const curr = smooth[i];
-                const d = Math.hypot(prev.x - curr.x, prev.y - curr.y);
+                let curr = smooth[i];
+                let d = Math.hypot(prev.x - curr.x, prev.y - curr.y);
 
                 while (dist + d >= target) {
-                    const t = (target - dist) / d;
+                    let t = (target - dist) / d;
                     points.push({
                         x: prev.x + (curr.x - prev.x) * t,
                         y: prev.y + (curr.y - prev.y) * t
@@ -554,13 +511,13 @@
         }
 
         function explodeWorm(pathArr, skinColor) {
-            const body = getRenderedBodyPoints(pathArr, pathArr[pathArr.length - 1]?.x || 0, pathArr[pathArr.length - 1]?.y || 0, pathArr.length);
+            let body = getRenderedBodyPoints(pathArr, pathArr[pathArr.length - 1]?.x || 0, pathArr[pathArr.length - 1]?.y || 0, pathArr.length);
             let i = 0;
 
             function spawnBatch() {
                 let count = 0;
                 while (i < body.length && count < 20) {
-                    const p = body[i];
+                    let p = body[i];
                     spawnFood(
                         p.x + (Math.random() - 0.5) * 2,
                         p.y + (Math.random() - 0.5) * 2,
@@ -580,25 +537,23 @@
 
         /* ================= UPDATE LOOP ================= */
         function update(dt) {
-            // --- PING TIMEOUT CHECK (IMMEDIATE DISCONNECT) ---
             if (isOnlineMode && isGameRunning) {
-                const now = Date.now();
+                let now = Date.now();
                 if (now - lastPingTime > PING_TIMEOUT) {
-                    // Internet is gone / Server crashed
                     handleNetworkError("NETWORK ERROR", "Connection Lost. Check your internet.");
-                    return; // Stop update immediately
+                    return;
                 }
             }
 
             if (isGameOver || !isGameRunning) return;
 
-            const now = Date.now();
+            let now = Date.now();
             gameTime += 0.05 * dt;
 
             // Clock Update
-            const elapsed = Math.floor((now - startTime) / 1000);
-            const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-            const secs = (elapsed % 60).toString().padStart(2, '0');
+            let elapsed = Math.floor((now - startTime) / 1000);
+            let mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            let secs = (elapsed % 60).toString().padStart(2, '0');
             document.getElementById('clock-display').innerText = `${mins}:${secs}`;
 
             // Buffs
@@ -623,15 +578,15 @@
                 length -= MASS_LOSS_PER_TICK * dt;
             }
 
-            const isSharp = (now < expiries.ae);
+            let isSharp = (now < expiries.ae);
 
             // Player Turning
-            const dx = mouse.x - canvas.width / 2;
-            const dy = mouse.y - canvas.height / 2;
-            const distToMouse = Math.hypot(dx, dy);
+            let dx = mouse.x - canvas.width / 2;
+            let dy = mouse.y - canvas.height / 2;
+            let distToMouse = Math.hypot(dx, dy);
 
             if (distToMouse > 20) {
-                const targetAngle = Math.atan2(dy, dx);
+                let targetAngle = Math.atan2(dy, dx);
                 let baseTurnSpeed = TURN_SPEED_WIDE;
                 if (boosting) baseTurnSpeed = TURN_SPEED_BOOST;
                 if (isSharp) baseTurnSpeed = TURN_SPEED_SHARP;
@@ -646,46 +601,39 @@
                 head.x += Math.cos(head.angle) * spd * dt;
                 head.y += Math.sin(head.angle) * spd * dt;
 
-                const last = path[path.length - 1];
+                let last = path[path.length - 1];
                 if (!last || Math.hypot(head.x - last.x, head.y - last.y) >= PATH_SPACING) {
                     path.push({ x: head.x, y: head.y });
                 }
             }
 
-            const maxPath = length * SEGMENT_SPACING + 150;
+            let maxPath = length * SEGMENT_SPACING + 150;
             if (path.length > maxPath) path.splice(0, path.length - maxPath);
 
-            // Send Data to Server
             if (ws && ws.readyState === WebSocket.OPEN && isOnlineMode) {
-                // Throttle sending to every 50ms (20 times a sec) to save bandwidth
                 if (now % 50 < 17) {
-                    const payload = {
-                            type: 'update',
-                            x: head.x,
-                            y: head.y,
-                            angle: head.angle,
-                            length: length,
-                            path: path,
-                            name: playerName,
-                            color: playerColor
-                        };
+                    let payload = {
+                        type: 'update',
+                        x: head.x,
+                        y: head.y,
+                        angle: head.angle,
+                        length: length,
+                        path: path,
+                        name: playerName,
+                        color: playerColor
+                    };
                     ws.send(JSON.stringify(payload));
                 }
             }
 
             if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
-                // In offline mode, just die. In online mode, server handles it.
-                if (!isOnlineMode) {
-                    triggerGameOver();
-                } else {
-                    // Online mode: Tell server we hit border
-                    // Server will validate and send 'die' back
-                }
+                triggerGameOver();
+                return;
             }
 
             // Food Physics + Collision
             for (let i = food.length - 1; i >= 0; i--) {
-                const f = food[i];
+                let f = food[i];
 
                 if (f.isDrops && (now - f.spawnTime > 40000)) {
                     food.splice(i, 1);
@@ -695,8 +643,7 @@
                 if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
 
                 if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
-                    // SLOWER GROWTH LOGIC:
-                    const growthFactor = Math.max(0.1, 50 / length);
+                    let growthFactor = Math.max(0.1, 50 / length);
                     length += (f.r / 4) * currentMult * growthFactor;
 
                     food.splice(i, 1);
@@ -706,7 +653,7 @@
 
             // Powerups Collision
             for (let i = powerups.length - 1; i >= 0; i--) {
-                const p = powerups[i];
+                let p = powerups[i];
                 p.x += Math.cos(gameTime + i) * 0.5 * dt;
                 if (Math.abs(head.x - p.x) > 50 || Math.abs(head.y - p.y) > 50) continue;
                 if (Math.hypot(head.x - p.x, head.y - p.y) < getWormRadius(length) + p.r + 10) {
@@ -733,11 +680,11 @@
                 bot.x += Math.cos(bot.angle) * BASE_SPEED * dt;
                 bot.y += Math.sin(bot.angle) * BASE_SPEED * dt;
 
-                const last = bot.path[bot.path.length - 1];
+                let last = bot.path[bot.path.length - 1];
                 if (!last || Math.hypot(bot.x - last.x, bot.y - last.y) >= PATH_SPACING) {
                     bot.path.push({ x: bot.x, y: bot.y });
                 }
-                const maxPath = bot.length * SEGMENT_SPACING + 150;
+                let maxPath = bot.length * SEGMENT_SPACING + 150;
                 if (bot.path.length > maxPath) bot.path.splice(0, bot.path.length - maxPath);
 
                 bot.score = Math.floor(bot.length * 10);
@@ -750,14 +697,14 @@
         }
 
         function isHeadUnderEnemy(head, enemyCollPath, enemyLen) {
-            const enemyR = getWormRadius(enemyLen);
-            const underR = enemyR * UNDER_RATIO;
-            const skipTail = Math.min(30, Math.floor(enemyCollPath.length * 0.15));
+            let enemyR = getWormRadius(enemyLen);
+            let underR = enemyR * UNDER_RATIO;
+            let skipTail = Math.min(30, Math.floor(enemyCollPath.length * 0.15));
 
             for (let k = 0; k < enemyCollPath.length - skipTail; k += 2) {
-                const p = enemyCollPath[k];
-                const dx = head.x - p.x;
-                const dy = head.y - p.y;
+                let p = enemyCollPath[k];
+                let dx = head.x - p.x;
+                let dy = head.y - p.y;
                 if (Math.abs(dx) > underR + 2 || Math.abs(dy) > underR + 2) continue;
                 if (Math.hypot(dx, dy) < underR) return true;
             }
@@ -765,7 +712,7 @@
         }
 
         function getNeckByDistance(collPathHeadFirst, maxDist) {
-            const neck = [];
+            let neck = [];
             let dist = 0;
             for (let i = 0; i < collPathHeadFirst.length; i++) {
                 if (i > 0) {
@@ -785,64 +732,64 @@
 
             playerIsUnder = false;
 
-            const myR = getWormRadius(length);
+            let myR = getWormRadius(length);
 
-            const checkHit = (attackerHead, victimPath, victimLen, attackerHeadRadius) => {
-                const victimR = getWormRadius(victimLen);
-                const underR = victimR * UNDER_RATIO;
-                const overR = victimR * COLLISION_OVER_RATIO + attackerHeadRadius * 0.05;
-                const skipTail = Math.min(6, Math.floor(victimPath.length * 0.2));
+            let checkHit = (attackerHead, victimPath, victimLen, attackerHeadRadius) => {
+                let victimR = getWormRadius(victimLen);
+                let underR = victimR * UNDER_RATIO;
+                let overR = victimR * COLLISION_OVER_RATIO + attackerHeadRadius * 0.05;
+                let skipTail = Math.min(6, Math.floor(victimPath.length * 0.2));
 
                 for (let k = 0; k < victimPath.length - skipTail; k += 3) {
-                    const p = victimPath[k];
-                    const dx = attackerHead.x - p.x;
-                    const dy = attackerHead.y - p.y;
+                    let p = victimPath[k];
+                    let dx = attackerHead.x - p.x;
+                    let dy = attackerHead.y - p.y;
                     if (Math.abs(dx) > overR + 6 || Math.abs(dy) > overR + 6) continue;
 
-                    const d = Math.hypot(dx, dy);
+                    let d = Math.hypot(dx, dy);
                     if (d < underR) continue;
                     if (d < overR) return true;
                 }
                 return false;
             };
 
-            const checkHeadshotTouch = (attackerHead, victimNeckPath, victimLen, attackerLen) => {
-                const victimR = getWormRadius(victimLen);
-                const attackerR = getWormRadius(attackerLen);
-                const hsR = victimR * 0.60 + attackerR * 0.60;
+            let checkHeadshotTouch = (attackerHead, victimNeckPath, victimLen, attackerLen) => {
+                let victimR = getWormRadius(victimLen);
+                let attackerR = getWormRadius(attackerLen);
+                let hsR = victimR * 0.60 + attackerR * 0.60;
 
                 for (let k = 0; k < victimNeckPath.length; k += 2) {
-                    const p = victimNeckPath[k];
-                    const dx = attackerHead.x - p.x;
-                    const dy = attackerHead.y - p.y;
+                    let p = victimNeckPath[k];
+                    let dx = attackerHead.x - p.x;
+                    let dy = attackerHead.y - p.y;
                     if (Math.abs(dx) > hsR + 4 || Math.abs(dy) > hsR + 4) continue;
                     if (Math.hypot(dx, dy) < hsR) return true;
                 }
                 return false;
             };
 
-            const resolveHeadOn = (a, b, aLen, bLen, aColl, bColl) => {
-                const dist = Math.hypot(a.x - b.x, a.y - b.y);
-                const minR = Math.min(getWormRadius(aLen), getWormRadius(bLen));
+            let resolveHeadOn = (a, b, aLen, bLen, aColl, bColl) => {
+                let dist = Math.hypot(a.x - b.x, a.y - b.y);
+                let minR = Math.min(getWormRadius(aLen), getWormRadius(bLen));
 
                 if (dist < (minR * 2.2) && dist > (minR * 0.55)) {
-                    const distA = Math.hypot(a.x, a.y);
-                    const distB = Math.hypot(b.x, b.y);
-                    const dotA = (-a.x * Math.cos(a.angle)) + (-a.y * Math.sin(a.angle));
-                    const dotB = (-b.x * Math.cos(b.angle)) + (-b.y * Math.sin(b.angle));
+                    let distA = Math.hypot(a.x, a.y);
+                    let distB = Math.hypot(b.x, b.y);
+                    let dotA = (-a.x * Math.cos(a.angle)) + (-a.y * Math.sin(a.angle));
+                    let dotB = (-b.x * Math.cos(b.angle)) + (-b.y * Math.sin(b.angle));
 
                     if (distA > distB && dotA > 0) return 1;
                     if (distB > distA && dotB > 0) return 2;
                     return 3;
                 }
 
-                const neckDistA = getWormRadius(aLen) * 2.2;
-                const neckDistB = getWormRadius(bLen) * 2.2;
-                const aNeck = getNeckByDistance(aColl, neckDistA);
-                const bNeck = getNeckByDistance(bColl, neckDistB);
+                let neckDistA = getWormRadius(aLen) * 2.2;
+                let neckDistB = getWormRadius(bLen) * 2.2;
+                let aNeck = getNeckByDistance(aColl, neckDistA);
+                let bNeck = getNeckByDistance(bColl, neckDistB);
 
-                const aHitsBNeck = checkHeadshotTouch(a, bNeck, bLen, aLen);
-                const bHitsANeck = checkHeadshotTouch(b, aNeck, aLen, bLen);
+                let aHitsBNeck = checkHeadshotTouch(a, bNeck, bLen, aLen);
+                let bHitsANeck = checkHeadshotTouch(b, aNeck, aLen, bLen);
 
                 if (aHitsBNeck && bHitsANeck) return 3;
                 if (aHitsBNeck) return 1;
@@ -850,14 +797,13 @@
                 return 0;
             };
 
-            const playerCollPath = getCollisionPath(path, head.x, head.y, length - 3);
-            const botCollPaths = new Array(bots.length);
+            let playerCollPath = getCollisionPath(path, head.x, head.y, length - 3);
+            let botCollPaths = new Array(bots.length);
             for (let i = 0; i < bots.length; i++) {
-                const b = bots[i];
+                let b = bots[i];
                 botCollPaths[i] = getCollisionPath(b.path, b.x, b.y, b.length - 3);
             }
 
-            // 1. Player vs Bots
             for (let i = 0; i < bots.length; i++) {
                 let b = bots[i];
 
@@ -877,7 +823,7 @@
                     continue;
                 }
 
-                const res = resolveHeadOn(head, b, length, b.length, playerCollPath, botCollPaths[i]);
+                let res = resolveHeadOn(head, b, length, b.length, playerCollPath, botCollPaths[i]);
                 if (res === 1) {
                     killBot(i);
                     hsCount++;
@@ -888,20 +834,16 @@
                 else if (res === 3) { triggerGameOver(); return; }
             }
 
-            // 2. Player vs Remote Players (Online Only)
-            // Note: We only check collision here if we are ONLINE
             if (isOnlineMode) {
                 for (const rp of Object.values(remotePlayers)) {
                     if (!rp || !rp.path) continue;
-                    const rpLen = rp.length || 50;
-                    const rpColl = getCollisionPath(rp.path, rp.x, rp.y, rpLen - 3);
+                    let rpLen = rp.length || 50;
+                    let rpColl = getCollisionPath(rp.path, rp.x, rp.y, rpLen - 3);
 
                     if (isHeadUnderEnemy(head, rpColl, rpLen)) {
                         playerIsUnder = true;
                         break;
                     }
-                    // Note: In Online mode, server verifies kills. We just show "under" effect.
-                    // We do NOT kill remote player here.
                 }
             }
         }
@@ -912,17 +854,17 @@
         }
 
         function killBot(index) {
-            const b = bots[index];
+            let b = bots[index];
             explodeWorm(b.path, b.color);
             resetBot(b);
         }
 
         function updateBuffUI(id, timeId, expiry, now) {
-            const el = document.getElementById(id);
+            let el = document.getElementById(id);
             if (now < expiry) {
                 el.style.display = 'flex';
-                const left = Math.ceil((expiry - now) / 1000);
-                const timeEl = document.getElementById(timeId);
+                let left = Math.ceil((expiry - now) / 1000);
+                let timeEl = document.getElementById(timeId);
                 if(timeEl) timeEl.innerText = left + "s";
             } else {
                 el.style.display = 'none';
@@ -930,8 +872,8 @@
         }
 
         function applyPowerup(type) {
-            const duration = 30000;
-            const now = Date.now();
+            let duration = 30000;
+            let now = Date.now();
             if (type === '2x') expiries.x2 = now + duration;
             if (type === '5x') expiries.x5 = now + duration;
             if (type === '10x') expiries.x10 = now + duration;
@@ -945,7 +887,6 @@
             isGameOver = true;
             isGameRunning = false;
 
-            // In Online Mode, tell server to remove us (Only if online)
             if (isOnlineMode && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'quit' }));
                 ws.close();
@@ -953,84 +894,51 @@
 
             explodeWorm(path, playerColor);
             
-            // Show Game Over UI
-            const score = Math.floor(length * 10);
+            let score = Math.floor(length * 10);
             showOverlay("GAME OVER", `Score: ${score}`);
         }
 
         function showOverlay(title, msg, isError = true) {
-            // Show overlay/popup
             document.getElementById("game-over").style.display = "flex";
-            document.getElementById("ui-layer").style.display = "none"; // Hide HUD
+            document.getElementById("ui-layer").style.display = "none";
             
-            // Set text
             document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
+            document.getElementById("overlay-msg").innerHTML = msg; 
 
-            // Change button visibility based on context
-            const btnHome = document.getElementById("btn-home");
-            const btnPlay = document.getElementById("btn-play");
+            let elBtnHome = document.getElementById("btn-home");
+            let elBtnPlay = document.getElementById("btn-play");
 
             if (isError) {
-                // It's an error/disconnect
-                btnPlay.innerText = "RETRY";
-                btnHome.innerText = "PLAY OFFLINE";
-                
-                // Override Clicks for Network Error
-                btnPlay.onclick = () => {
-                    document.getElementById("game-over").style.display = 'none'; 
-                    attemptConnect();
-                };
-                btnHome.onclick = () => {
-                    document.getElementById("game-over").style.display = 'none'; 
-                    startOffline();
-                };
+                elBtnPlay.innerText = "RETRY";
+                elBtnHome.innerText = "PLAY OFFLINE";
             } else {
-                // It's a game over
-                btnPlay.innerText = "PLAY AGAIN";
-                btnHome.innerText = "EXIT TO LOBBY";
-                
-                // Override Clicks for Game Over
-                btnPlay.onclick = () => {
-                    document.getElementById("game-over").style.display = 'none'; 
-                    restartGame();
-                };
-                btnHome.onclick = () => {
-                    goHome();
-                };
+                elBtnPlay.innerText = "PLAY AGAIN";
+                elBtnHome.innerText = "EXIT TO LOBBY";
             }
-        }
 
-        function restartGame() {
-            // Ensure we are in a clean state
-            const overlay = document.getElementById("game-over");
-            overlay.style.display = 'none';
-            // Reset Buttons to Default
-            const btnPlay = document.getElementById("btn-play");
-            const btnHome = document.getElementById("btn-home");
-            btnPlay.innerText = "PLAY AGAIN";
-            btnHome.innerText = "GO HOME";
-            
-            // If we were online, try reconnect. If offline, restart offline.
-            if (isOnlineMode) attemptConnect();
-            else startOffline();
+            elBtnPlay.onclick = () => { 
+                document.getElementById("game-over").style.display = "none"; 
+                if (isError) attemptConnect();
+                else restartGame();
+            };
+            elBtnHome.onclick = goHome;
         }
 
         /* ================= DRAWING / RENDERER ================= */
         function isPointUnderWorm(x, y, worm) {
             if (!worm || !worm.path) return false;
 
-            const wormR = getWormRadius(worm.length || 50);
-            const underR = wormR * UNDER_RATIO;
-            const underR2 = underR * underR;
+            let wormR = getWormRadius(worm.length || 50);
+            let underR = wormR * UNDER_RATIO;
+            let underR2 = underR * underR;
 
-            const coll = getCollisionPath(worm.path, worm.x, worm.y, (worm.length || 50) - 3);
-            const maxK = Math.floor(coll.length * 0.7);
+            let coll = getCollisionPath(worm.path, worm.x, worm.y, (worm.length || 50) - 3);
+            let maxK = Math.floor(coll.length * 0.7);
 
             for (let k = 0; k < maxK; k += 3) {
-                const p = coll[k];
-                const dx = x - p.x;
-                const dy = y - p.y;
+                let p = coll[k];
+                let dx = x - p.x;
+                let dy = y - p.y;
                 if (dx * dx + dy * dy < underR2) return true;
             }
             return false;
@@ -1047,13 +955,12 @@
             ctx.scale(zoom, zoom);
             ctx.translate(-head.x, -head.y);
 
-            // Viewport Culling
-            const visibleW = canvas.width / zoom;
-            const visibleH = canvas.height / zoom;
-            const viewLeft = head.x - visibleW / 2 - 200;
-            const viewRight = head.x + visibleW / 2 + 200;
-            const viewTop = head.y - visibleH / 2 - 200;
-            const viewBottom = head.y + visibleH / 2 + 200;
+            let visibleW = canvas.width / zoom;
+            let visibleH = canvas.height / zoom;
+            let viewLeft = head.x - visibleW / 2 - 200;
+            let viewRight = head.x + visibleW / 2 + 200;
+            let viewTop = head.y - visibleH / 2 - 200;
+            let viewBottom = head.y + visibleH / 2 + 200;
 
             // Draw Map Border
             ctx.beginPath();
@@ -1071,11 +978,11 @@
             ctx.lineWidth = 1;
             ctx.beginPath();
 
-            const gridStep = 100;
-            const startX = Math.max(-MAP_RADIUS, Math.floor(viewLeft / gridStep) * gridStep);
-            const endX = Math.min(MAP_RADIUS, Math.ceil(viewRight / gridStep) * gridStep);
-            const startY = Math.max(-MAP_RADIUS, Math.floor(viewTop / gridStep) * gridStep);
-            const endY = Math.min(MAP_RADIUS, Math.ceil(viewBottom / gridStep) * gridStep);
+            let gridStep = 100;
+            let startX = Math.max(-MAP_RADIUS, Math.floor(viewLeft / gridStep) * gridStep);
+            let endX = Math.min(MAP_RADIUS, Math.ceil(viewRight / gridStep) * gridStep);
+            let startY = Math.max(-MAP_RADIUS, Math.floor(viewTop / gridStep) * gridStep);
+            let endY = Math.min(MAP_RADIUS, Math.ceil(viewBottom / gridStep) * gridStep);
 
             for (let i = startX; i <= endX; i += gridStep) {
                 ctx.moveTo(i, -MAP_RADIUS); ctx.lineTo(i, MAP_RADIUS);
@@ -1097,7 +1004,7 @@
                 if (p.x < viewLeft || p.x > viewRight || p.y < viewTop || p.y > viewBottom) continue;
                 ctx.save();
                 ctx.translate(p.x, p.y);
-                const scale = 1 + Math.sin(gameTime * 2) * 0.1;
+                let scale = 1 + Math.sin(gameTime * 2) * 0.1;
                 ctx.scale(scale, scale);
                 ctx.fillStyle = "rgba(0,0,0,0.5)";
                 ctx.beginPath();
@@ -1116,7 +1023,6 @@
                 ctx.restore();
             }
 
-            // Draw Bots and Player with Layering
             drawBots(visibleW, visibleH);
             drawRemotePlayers(visibleW, visibleH);
             drawPlayerBody(visibleW, visibleH);
@@ -1132,7 +1038,6 @@
         }
 
         function drawRemotePlayers(visibleW, visibleH) {
-            // Only draw remote players if we are ONLINE
             if (isOnlineMode) {
                 Object.values(remotePlayers).forEach(p => {
                     drawGenericSnake(p, visibleW, visibleH);
@@ -1143,23 +1048,23 @@
         function drawGenericSnake(bot, visibleW, visibleH) {
             if (Math.abs(bot.x - head.x) > visibleW && Math.abs(bot.y - head.y) > visibleH) return;
 
-            const dxB = bot.x - head.x;
-            const dyB = bot.y - head.y;
-            const distB = Math.hypot(dxB, dyB);
-            const maxDrawSegments = distB > 2000 ? Math.min(bot.length, 25) :
+            let dxB = bot.x - head.x;
+            let dyB = bot.y - head.y;
+            let distB = Math.hypot(dxB, dyB);
+            let maxDrawSegments = distB > 2000 ? Math.min(bot.length, 25) :
                 distB > 1200 ? Math.min(bot.length, 60) :
                     bot.length;
 
-            const botR = getWormRadius(bot.length);
+            let botR = getWormRadius(bot.length);
             if (!bot.path) bot.path = [];
 
-            const pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
+            let pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
 
             // FAKE SHADOW / GLOW LAYER
             if (distB < 1200) {
                 ctx.fillStyle = "rgba(0,0,0,0.2)";
                 for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-                    const p = pointsToDraw[i];
+                    let p = pointsToDraw[i];
                     ctx.beginPath();
                     ctx.arc(p.x + 3, p.y + 3, botR, 0, Math.PI * 2);
                     ctx.fill();
@@ -1167,14 +1072,11 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false; // Use skin for bots too
-
-            // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-                const p = pointsToDraw[i];
+                let p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, botR, 0, Math.PI*2);
+                ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
                 ctx.fill();
                 if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
             }
@@ -1197,24 +1099,22 @@
 
         function drawPlayerBody(visibleW, visibleH) {
             if (!isGameOver) {
-                const playerR = getWormRadius(length);
-                const underTint = playerIsUnder ? 0.92 : 1.0;
+                let playerR = getWormRadius(length);
+                let underTint = playerIsUnder ? 0.92 : 1.0;
                 ctx.globalAlpha = underTint;
 
-                const pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
+                let pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
 
                 // Determine segments (Under vs Over)
-                // Player is only under Remote Players (Online Mode) or Bots (Offline/Online)
-                const enemies = [...bots];
+                let enemies = [...bots];
                 if (isOnlineMode) enemies.push(...Object.values(remotePlayers));
 
-                const underSegs = [];
-                const overSegs = [];
+                let underSegs = [];
+                let overSegs = [];
 
                 for (let i = 0; i < pointsToDraw.length; i++) {
-                    const p = pointsToDraw[i];
+                    let p = pointsToDraw[i];
                     let under = false;
-                    // Optimization: Distance check
                     for (const e of enemies) {
                         if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
                             if (isPointUnderWorm(p.x, p.y, e)) {
@@ -1226,17 +1126,17 @@
                     (under ? underSegs : overSegs).push(p);
                 }
 
-                // 1. Draw Glow/Shadow for UNDER segments
-                underSegs.forEach((p, index) => {
+                // Draw Glow/Shadow for UNDER segments
+                underSegs.forEach((p) => {
                     ctx.fillStyle = "rgba(0,0,0,0.2)";
                     ctx.beginPath();
                     ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
                     ctx.fill();
                 });
 
-                // 2. Draw UNDER Segments
+                // Draw UNDER Segments
                 for (let i = underSegs.length - 1; i >= 0; i--) {
-                    const p = underSegs[i];
+                    let p = underSegs[i];
                     ctx.fillStyle = playerColor;
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
@@ -1244,17 +1144,17 @@
                     drawSegmentOverlay(ctx, p.x, p.y, playerR);
                 }
 
-                // 3. Draw Glow/Shadow for OVER segments
-                overSegs.forEach((p, index) => {
+                // Draw Glow/Shadow for OVER segments
+                overSegs.forEach((p) => {
                     ctx.fillStyle = "rgba(0,0,0,0.2)";
                     ctx.beginPath();
                     ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
                     ctx.fill();
                 });
 
-                // 4. Draw OVER Segments
+                // Draw OVER Segments
                 for (let i = overSegs.length - 1; i >= 0; i--) {
-                    const p = overSegs[i];
+                    let p = overSegs[i];
                     ctx.fillStyle = playerColor;
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
@@ -1285,9 +1185,9 @@
             ctx.translate(x, y);
             ctx.rotate(angle);
 
-            const eyeX = r * 0.35;
-            const eyeY = r * 0.28;
-            const eyeR = r * 0.35;
+            let eyeX = r * 0.35;
+            let eyeY = r * 0.28;
+            let eyeR = r * 0.35;
 
             ctx.fillStyle = "white";
             ctx.strokeStyle = "black";
@@ -1300,7 +1200,7 @@
             ctx.stroke();
 
             ctx.fillStyle = "black";
-            const pupilR = eyeR * 0.28;
+            let pupilR = eyeR * 0.28;
             ctx.beginPath();
             ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI * 2);
             ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
@@ -1310,9 +1210,9 @@
             ctx.lineWidth = Math.max(2, r * 0.14);
             ctx.lineCap = "round";
 
-            const mouthX = r * 0.55;
-            const mouthY = 0;
-            const mouthR = r * 0.55;
+            let mouthX = r * 0.55;
+            let mouthY = 0;
+            let mouthR = r * 0.55;
 
             ctx.beginPath();
             ctx.arc(mouthX, mouthY, mouthR, -0.55, 0.55);
@@ -1396,24 +1296,23 @@
             miniCtx.moveTo(75, 0); miniCtx.lineTo(75, 150);
             miniCtx.stroke();
 
-            const scale = 150 / (MAP_RADIUS * 2);
-            const centerX = 75;
-            const centerY = 75;
+            let scale = 150 / (MAP_RADIUS * 2);
+            let centerX = 75;
+            let centerY = 75;
 
             bots.forEach(bot => {
-                const mx = centerX + bot.x * scale;
-                const my = centerY + bot.y * scale;
+                let mx = centerX + bot.x * scale;
+                let my = centerY + bot.y * scale;
                 miniCtx.fillStyle = bot.color;
                 miniCtx.beginPath();
                 miniCtx.arc(mx, my, 2, 0, Math.PI * 2);
                 miniCtx.fill();
             });
 
-            // Only draw remote players on minimap if ONLINE
             if (isOnlineMode) {
                 Object.values(remotePlayers).forEach(p => {
-                    const mx = centerX + p.x * scale;
-                    const my = centerY + p.y * scale;
+                    let mx = centerX + p.x * scale;
+                    let my = centerY + p.y * scale;
                     miniCtx.fillStyle = p.color || "#fff";
                     miniCtx.beginPath();
                     miniCtx.arc(mx, my, 2, 0, Math.PI * 2);
@@ -1422,8 +1321,8 @@
             }
 
             if (!isGameOver) {
-                const px = centerX + head.x * scale;
-                const py = centerY + head.y * scale;
+                let px = centerX + head.x * scale;
+                let py = centerY + head.y * scale;
                 miniCtx.fillStyle = "white";
                 miniCtx.beginPath();
                 miniCtx.arc(px, py, 3, 0, Math.PI * 2);
@@ -1442,52 +1341,48 @@
         }
 
         function getWormRadius(len) {
-            // Start THICKER (minR increased from 11 to 20)
-            const minR = 25;
-            const maxR = 60;
-
-            // Use Logarithmic scale so 100000 mass doesn't cover map
-            const base = Math.log10(Math.max(len, 50));
-            const t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
+            let minR = 25;
+            let maxR = 60;
+            let base = Math.log10(Math.max(len, 50));
+            let t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
             return minR + (maxR - minR) * t;
         }
 
-        // --- FIX: UpdateLeaderboardUI ---
+        // --- FIX: UpdateLeaderboardUI with renamed variables to prevent "Assignment to constant variable" error ---
         function updateLeaderboardUI() {
-            const myList = [...bots];
+            let lbList = [...bots];
             
-            // Add Remote Players to Leaderboard if ONLINE
             if (isOnlineMode) {
-                myList = [...myList, ...Object.values(remotePlayers)];
+                lbList = [...lbList, ...Object.values(remotePlayers)];
             }
 
-            // --- FIX: Changed const to let to prevent "Assignment to constant variable" error ---
-            let onlineEl = document.getElementById('online-count');
-            if (onlineEl) {
-                let onlineCount = list.length + Object.keys(remotePlayers).length + (isOnlineMode && !isGameOver ? 1 : 0);
-                onlineEl.innerText = `(${onlineCount} online)`;
+            let elOnlineCount = document.getElementById('online-count');
+            if (elOnlineCount) {
+                let onlineCount = lbList.length + Object.keys(remotePlayers).length + (isOnlineMode && !isGameOver ? 1 : 0);
+                elOnlineCount.innerText = `(${onlineCount} online)`;
             }
 
-            const myScore = Math.floor(length * 10);
-            myList.push({ name: playerName || "You", score: myScore, isMe: true });
-            myList.sort((a, b) => b.score - a.score);
-            const lbDiv = document.getElementById('lb-content');
+            let score = Math.floor(length * 10);
+            lbList.push({ name: playerName || "You", score: score, isMe: true });
+            lbList.sort((a, b) => b.score - a.score);
+            
+            let elLbContent = document.getElementById('lb-content');
             let html = '';
-            myList.slice(0, 10).forEach((p, index) => {
-                const className = p.isMe ? "lb-row lb-me" : "lb-row";
+            lbList.slice(0, 10).forEach((p, index) => {
+                let className = p.isMe ? "lb-row lb-me" : "lb-row";
                 html += `<div class="${className}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
             });
-            lbDiv.innerHTML = html;
+            elLbContent.innerHTML = html;
         }
 
         /* ================= MAIN LOOP ================= */
         function loop() {
             requestAnimationFrame(loop);
 
-            const now = performance.now();
+            let now = performance.now();
             let dt = (now - lastTime) / (1000 / 60);
             lastTime = now;
-            if (dt > 10) dt = 1; // Cap lag
+            if (dt > 10) dt = 1; 
 
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
