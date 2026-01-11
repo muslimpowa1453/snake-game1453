@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Safe FPS</title>
+    <title>Wormate Clone - Working</title>
     <style>
         body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; }
@@ -14,11 +14,11 @@
         #minimap-container { position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.5); border-radius: 50%; border: 3px solid #333; overflow: hidden; }
         #minimap { width: 100%; height: 100%; }
 
-        /* STATS */
+        /* STATS (Updated Line) */
         #stats-ui { 
             position: absolute; top: 180px; left: 20px; 
             color: white; font-size: 16px; font-weight: bold; 
-            text-shadow:1px 1px 2px black; background: rgba(0,0,0,0.4); 
+            text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.4); 
             padding: 5px 10px; border-radius: 8px; 
             display: flex; flex-direction: column; gap: 2px;
         }
@@ -135,6 +135,7 @@
         let connectionActive = false;
         let isOnlineMode = true;
 
+        // --- DEFINED FUNCTIONS AT TOP TO PREVENT HOISTING ERRORS ---
         function handleMessage(data) {
             if (data.type === 'init') {
                 myId = data.selfId;
@@ -148,9 +149,8 @@
                 }
             }
             else if (data.type === 'remove') {
-                // STRICT KICK: If I am removed, I am dead/kicked.
                 if (data.id === myId) {
-                    handleNetworkError("KICKED", "You were removed from the server.");
+                    handleNetworkError("KICKED", "You were removed from server.");
                 } else {
                     delete remotePlayers[data.id];
                 }
@@ -160,18 +160,17 @@
                     const now = Date.now();
                     data.food.forEach(f => {
                         food.push({
-                                            x: f.x,
-                                            y: f.y,
-                                            r: f.r,
-                                            color: f.color,
-                                            type: 0,
-                                            angle: Math.random() * Math.PI * 2,
-                                            spawnTime: now,
-                                            isDrops: true,
-                                            noGlow: false,
-                                            vx: 0, vy: 0
-                                        });
-                            });
+                            x: f.x,
+                            y: f.y,
+                            r: f.r,
+                            color: f.color,
+                            type: 0,
+                            angle: Math.random() * Math.PI * 2,
+                            spawnTime: now,
+                            isDrops: true,
+                            noGlow: false,
+                            vx: 0, vy: 0
+                        });
                     });
                 }
             }
@@ -202,21 +201,12 @@
             connectToServer();
         }
 
-        function startOffline() {
-            isOnlineMode = false;
-            document.getElementById("loading-screen").style.display = "none";
-            document.getElementById("ui-layer").style.display = "block";
-            document.getElementById("lobby").style.display = "none";
-            initGame();
-        }
-
         function connectToServer() {
             if (ws) {
                 ws.close();
                 ws = null;
             }
 
-            // TIMEOUT HANDLE
             const connectionTimeout = setTimeout(() => {
                 if (connectionActive) return;
                 handleNetworkError("NETWORK ERROR", "Connection timed out. Check your internet or try 'Play Offline'.");
@@ -258,24 +248,23 @@
             }
         }
 
-        // --- FIX: HandleMessage defined here to be Global ---
         function handleNetworkError(title, msg, isError = true) {
-            // 1. Stop Game Logic
+            // Stop Game Logic
             isGameRunning = false;
             isGameOver = false;
 
-            // 2. Hide Game UI Layer
-            document.getElementById("ui-layer").style.display = 'none'; // Hide HUD
+            // Hide Game UI Layer
+            document.getElementById("ui-layer").style.display = 'none';
             
-            // 3. Show Overlay Popup
+            // Show Overlay Popup
             const overlay = document.getElementById('game-over');
             overlay.style.display = 'flex';
             
-            // 4. Set Text
+            // Set Text
             document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
+            document.getElementById("overlay-msg").innerHTML = msg;
 
-            // 5. Configure Buttons
+            // Change button visibility based on context
             const btnHome = document.getElementById("btn-home");
             const btnPlay = document.getElementById("btn-play");
 
@@ -322,6 +311,15 @@
             // Retry logic based on mode
             if (isOnlineMode) attemptConnect();
             else startOffline();
+        }
+
+        function startOffline() {
+            isOnlineMode = false;
+            document.getElementById("loading-screen").style.display = "none";
+            document.getElementById("ui-layer").style.display = "block";
+            document.getElementById("lobby").style.display = "none";
+            
+            initGame();
         }
 
         /* ================= GLOBAL SETUP ================= */
@@ -626,7 +624,6 @@
             document.getElementById('clock-display').innerText = `${mins}:${secs}`;
 
             // --- INERTIA / INPUT HANDLING ---
-            // Check time since last input
             const timeSinceInput = now - lastInputTime;
             
             // Apply friction if no input recently
@@ -698,8 +695,6 @@
                 // Wait 0.5s before drawing effect
                 if (now - headshotTime > 500) {
                     isHeadshotActive = false; // Stop showing effect
-                } else {
-                    // Effect is active
                 }
             } else {
                 // Reset state
@@ -707,7 +702,7 @@
             }
 
             // Send Data to Server
-            if (ws && ws.readyState === WebSocket.OPEN && isOnlineMode) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
                 // Throttle sending to every 50ms (20 times a sec) to save bandwidth
                 if (now % 50 < 17) {
                     const payload = {
@@ -932,7 +927,7 @@
                     
                     // Play Sound
                     const audio = document.getElementById('hs-audio');
-                    if(audio) {
+                    if (audio) {
                         audio.currentTime = 0;
                         audio.play().catch(() => {});
                     }
@@ -947,7 +942,6 @@
             }
 
             // 2. Player vs Remote Players
-            // Note: We only check collision here if we are ONLINE
             if (isOnlineMode) {
                 for (const rp of Object.values(remotePlayers)) {
                     if (!rp || !rp.path) continue;
@@ -959,6 +953,7 @@
                         break;
                     }
                     // Note: We don't check kill logic for remote vs local here to avoid desync.
+                    // Server handles it.
                 }
             }
         }
@@ -981,7 +976,7 @@
                 el.style.display = 'flex';
                 const left = Math.ceil((expiry - now) / 1000);
                 const timeEl = document.getElementById(timeId);
-                if(timeEl) timeEl.innerText = left + "s";
+                if (timeEl) timeEl.innerText = left + "s";
             } else {
                 el.style.display = 'none';
             }
@@ -989,12 +984,11 @@
 
         function applyPowerup(type) {
             const now = Date.now();
-            // --- FIXED BUFF TIMES ---
-            if (type === '2x') expiries.x2 = now + 120000; // 120s
-            if (type === '5x') expiries.x5 = now + 40000;  // 40s
-            if (type === '10x') expiries.x10 = now + 20000; // 20s
-            if (type === 'ae') expiries.ae = now + 40000; // 40s (Cutting Edge)
-            if (type === 'spd') expiries.spd = now + 20000; // 20s
+            if (type === '2x') expiries.x2 = now + 120000;
+            if (type === '5x') expiries.x5 = now + 40000;
+            if (type === '10x') expiries.x10 = now + 20000;
+            if (type === 'ae') expiries.ae = now + 40000;
+            if (type === 'spd') expiries.spd = now + 20000;
         }
 
         function triggerGameOver() {
@@ -1003,7 +997,6 @@
             isGameOver = true;
             isGameRunning = false;
 
-            // Tell server we quit (sends 'remove' to others, triggering loot broadcast)
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'quit' }));
                 ws.close();
@@ -1011,38 +1004,32 @@
 
             explodeWorm(path, playerColor);
             
-            // Show Game Over UI (Only after we are removed/kicked)
             const score = Math.floor(length * 10);
             showOverlay("GAME OVER", `Score: ${score}`);
         }
 
         function showOverlay(title, msg, isError = true) {
-            // Show overlay/popup
             document.getElementById("game-over").style.display = "flex";
-            document.getElementById("ui-layer").style.display = "none"; // Hide HUD
+            document.getElementById("ui-layer").style.display = "none";
             
-            // Set text
             document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; // Support HTML in msg
+            document.getElementById("overlay-msg").innerHTML = msg;
 
-            // Change button visibility based on context
             const btnHome = document.getElementById("btn-home");
             const btnPlay = document.getElementById("btn-play");
 
             if (isError) {
-                // It's an error/disconnect
                 btnPlay.innerText = "RETRY";
                 btnHome.innerText = "PLAY OFFLINE";
             } else {
-                // It's a game over
                 btnPlay.innerText = "PLAY AGAIN";
                 btnHome.innerText = "EXIT TO LOBBY";
             }
             
-            // Override Clicks
             btnPlay.onclick = () => { 
                 document.getElementById("game-over").style.display = "none"; 
-                attemptConnect();
+                if (isError) attemptConnect();
+                else restartGame();
             };
             
             btnHome.onclick = () => {
@@ -1088,7 +1075,6 @@
             ctx.scale(zoom, zoom);
             ctx.translate(-head.x, -head.y);
 
-            // Viewport Culling
             const visibleW = canvas.width / zoom;
             const visibleH = canvas.height / zoom;
             const viewLeft = head.x - visibleW / 2 - 200;
@@ -1173,7 +1159,6 @@
         }
 
         function drawRemotePlayers(visibleW, visibleH) {
-            // Only draw remote players if we are ONLINE
             if (isOnlineMode) {
                 Object.values(remotePlayers).forEach(p => {
                     drawGenericSnake(p, visibleW, visibleH);
@@ -1196,13 +1181,6 @@
 
             const pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
 
-            // RANK LOGIC: Only show rank 1-10
-            let botRank = 1;
-            // (In a real game, you'd calculate rank from leaderboard, but here we can just do a quick check against my length)
-            if (bot.score > Math.floor(length * 10)) botRank++;
-            if (botRank > 10) botRank = 0; // No text for below 10
-
-            // FAKE SHADOW / GLOW LAYER
             if (distB < 1200) {
                 ctx.fillStyle = "rgba(0,0,0,0.2)";
                 for (let i = pointsToDraw.length - 1; i >= 0; i--) {
@@ -1214,9 +1192,6 @@
             }
 
             // MAIN BODY DRAW
-            const hasSkin = false; // Use skin for bots too
-
-            // Draw Segments
             for (let i = pointsToDraw.length - 1; i >= 0; i--) {
                 const p = pointsToDraw[i];
                 ctx.fillStyle = bot.color;
@@ -1234,19 +1209,11 @@
 
             drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
 
-            // RANK TEXT
-            if (botRank > 0) {
-                ctx.fillStyle = "#FFD700"; // Gold
-                ctx.font = "bold 12px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText(`#${botRank}`, bot.x, bot.y - 15);
-            }
-
             if (distB < 900) {
                 ctx.fillStyle = "white";
                 ctx.font = "12px Arial";
                 ctx.textAlign = "center";
-                ctx.fillText(bot.name, bot.x, bot.y - 28);
+                ctx.fillText(bot.name, bot.x, bot.y - 15);
             }
         }
 
@@ -1258,7 +1225,6 @@
 
                 const pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
 
-                // Determine segments (Under vs Over)
                 const enemies = [...bots];
                 if (isOnlineMode) enemies.push(...Object.values(remotePlayers));
 
@@ -1268,7 +1234,6 @@
                 for (let i = 0; i < pointsToDraw.length; i++) {
                     const p = pointsToDraw[i];
                     let under = false;
-                    // Optimization: Distance check
                     for (const e of enemies) {
                         if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
                             if (isPointUnderWorm(p.x, p.y, e)) {
@@ -1454,10 +1419,8 @@
             const centerX = 75;
             const centerY = 75;
 
-            // RANK LOGIC FOR MINIMAP: Only draw rank text for top 10
             const playerScore = Math.floor(length * 10);
             let myRank = 1;
-            // Simple loop to check bots higher than me
             for (let i = 0; i < bots.length; i++) {
                 if (bots[i].score > playerScore) myRank++;
                 if (myRank > 10) break;
@@ -1471,13 +1434,12 @@
                 miniCtx.arc(mx, my, 2, 0, Math.PI * 2);
                 miniCtx.fill();
 
-                // Check bot rank (same logic as above)
                 let botRank = 1;
                 if (bot.score > playerScore) botRank++;
                 if (botRank > 10) botRank = 0;
 
                 if (botRank > 0) {
-                    miniCtx.fillStyle = "#FFD700"; // Gold
+                    miniCtx.fillStyle = "#FFD700";
                     miniCtx.font = "bold 8px Arial";
                     miniCtx.textAlign = "center";
                     miniCtx.fillText(`#${botRank}`, mx, my - 8);
@@ -1505,7 +1467,6 @@
                 miniCtx.strokeStyle = "black";
                 miniCtx.stroke();
 
-                // My rank text
                 if (myRank > 0) {
                     miniCtx.fillStyle = "#FFD700";
                     miniCtx.font = "bold 10px Arial";
@@ -1532,47 +1493,37 @@
         }
 
         function updateLeaderboardUI() {
-            // RANK LOGIC FOR LEADERBOARD
-            const myList = [...bots];
+            let myList = [...bots];
             
-            // Add Remote Players to Leaderboard if ONLINE
             if (isOnlineMode) {
                 myList = [...myList, ...Object.values(remotePlayers)];
             }
 
-            // Sort by score
             myList.sort((a, b) => b.score - a.score);
 
-            // Add me and calculate rank locally for UI text (not for list sorting)
             const playerScore = Math.floor(length * 10);
             const myEntry = { name: playerName || "You", score: playerScore, isMe: true };
             
-            // Only update player's rank locally for rendering text (not for list sorting)
             let myRenderRank = 1;
             for (let i = 0; i < myList.length; i++) {
                 if (myList[i].score > playerScore) myRenderRank++;
             }
-            // Inject my rank into myEntry for UI logic
             myEntry.renderRank = myRenderRank;
 
             const lbDiv = document.getElementById('lb-content');
             let html = '';
             
-            // Generate HTML
             myList.slice(0, 10).forEach((p, index) => {
-                // Logic: Top 10 ranks (1, 2, ... 10)
-                const rankText = (index < 10) ? `#${index + 1}` : ""; // Only 1-10
-
+                const rankText = (index < 10) ? `#${index + 1}` : ""; 
                 const className = p.isMe ? "lb-row lb-me" : "lb-row";
                 html += `<div class="${className}"><span>${rankText} ${p.name}</span><span>${p.score}</span></div>`;
             });
             lbDiv.innerHTML = html;
 
-            // Update Online Count
             let elOnlineCount = document.getElementById('online-count');
             if (elOnlineCount) {
                 let onlineCount = myList.length; 
-                if (isOnlineMode && !isGameOver) onlineCount++; // Add self if alive
+                if (isOnlineMode && !isGameOver) onlineCount++; 
                 elOnlineCount.innerText = `(${onlineCount} online)`;
             }
         }
@@ -1590,7 +1541,6 @@
             if (now - lastFpsUpdate >= 1000) {
                 const fps = Math.round((frameCount * 1000) / (now - lastFpsUpdate)); 
                 
-                // --- FIX: Safe DOM Access for FPS ---
                 const fpsEl = document.getElementById("fps-counter");
                 if (fpsEl) {
                     fpsEl.textContent = `FPS: ${fps}`;
