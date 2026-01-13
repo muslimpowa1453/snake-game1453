@@ -168,12 +168,9 @@
                         value="Oyuncu">
                     
                     <div class="relative">
-                        <select id="server-select" class="game-input w-full text-center text-lg py-2 appearance-none cursor-pointer">
-                            <option value="wss://wormeight.onrender.com">🇩🇪 Almanya Sunucusu (WormEight)</option>
-                            <option value="firebase">🌍 Yedek Sunucu (Firebase)</option>
-                        </select>
-                        <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                            <i class="fas fa-caret-down"></i>
+                        <!-- Sunucu seçimi kaldırıldı, tek sunucu -->
+                        <div class="w-full text-center text-white font-bold bg-black/20 p-2 rounded-lg border border-white/20">
+                            🌍 Sunucu: Almanya (Aktif)
                         </div>
                     </div>
                 </div>
@@ -247,19 +244,7 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (Yedek) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase Config
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
+    <script>
         // --- OYUN AYARLARI (WORMATE FİZİKLERİ) ---
         const CONFIG = {
             mapRadius: 3000,
@@ -290,7 +275,7 @@
         // Değişkenler
         let canvas, ctx, mmCanvas, mmCtx, skinCanvas, skinCtx;
         let myId = null, ws = null;
-        let isPlaying = false, isBoosting = false, useFirebase = false;
+        let isPlaying = false, isBoosting = false;
         let mouse = { x: 0, y: 0, worldAngle: 0 };
         let camera = { x: 0, y: 0, scale: 0.8 };
         let animationFrameId;
@@ -332,11 +317,6 @@
             canvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateTouch(e); }, {passive:false});
 
             animateSkinPreview();
-
-            // Firebase Auth
-            signInAnonymously(auth).then(u => {
-                myId = u.user.uid;
-            });
         };
 
         function resize() {
@@ -404,7 +384,7 @@
 
         // --- BAĞLANTI VE OYUN BAŞLATMA ---
         window.attemptPlay = () => {
-            const srv = document.getElementById('server-select').value;
+            const srv = "wss://wormeight.onrender.com"; // Sabit sunucu
             const name = document.getElementById('username').value || "Worm";
             me.name = name;
 
@@ -414,38 +394,29 @@
             statusEl.className = "mt-4 bg-yellow-600 text-white px-6 py-2 rounded-full font-bold border-2 border-yellow-800 shadow-lg text-sm";
             statusText.innerText = "Sunucuya bağlanılıyor...";
 
-            if(srv === 'firebase') {
-                useFirebase = true;
-                startGame();
-            } else {
-                try {
-                    ws = new WebSocket(srv);
-                    ws.onopen = () => {
-                        console.log("WS Connected");
-                        useFirebase = false;
-                        statusEl.classList.add('hidden');
-                        startWebSocketSync();
-                        startGame();
-                    };
-                    ws.onerror = () => {
-                        console.log("WS Error");
-                        statusEl.className = "mt-4 bg-red-600 text-white px-6 py-2 rounded-full font-bold border-2 border-red-800 shadow-lg text-sm";
-                        statusText.innerText = "Sunucu Hatası! Firebase'e geçiliyor...";
-                        setTimeout(() => {
-                            useFirebase = true; 
-                            startGame();
-                        }, 1500);
-                    };
-                    ws.onclose = () => {
-                        if(isPlaying && !useFirebase) {
-                            die(); 
-                            alert("Sunucu bağlantısı koptu.");
-                        }
-                    };
-                } catch(e) {
-                    useFirebase = true;
+            try {
+                ws = new WebSocket(srv);
+                ws.onopen = () => {
+                    console.log("WS Connected");
+                    statusEl.classList.add('hidden');
+                    startWebSocketSync();
                     startGame();
-                }
+                };
+                ws.onerror = () => {
+                    console.error("WS Error");
+                    statusEl.className = "mt-4 bg-red-600 text-white px-6 py-2 rounded-full font-bold border-2 border-red-800 shadow-lg text-sm";
+                    statusText.innerText = "Sunucuya Bağlanılamadı!";
+                };
+                ws.onclose = () => {
+                    if(isPlaying) {
+                        die(); 
+                        alert("Sunucu bağlantısı koptu.");
+                    }
+                };
+            } catch(e) {
+                console.error(e);
+                statusEl.className = "mt-4 bg-red-600 text-white px-6 py-2 rounded-full font-bold border-2 border-red-800 shadow-lg text-sm";
+                statusText.innerText = "Bağlantı Hatası!";
             }
         };
 
@@ -467,14 +438,8 @@
 
             me.history = [];
             for(let i=0; i<20; i++) me.history.push({x: me.x, y: me.y});
-
-            // Firebase modundaysak yemleri biz üretelim, WS ise sunucudan bekleyelim
-            if(useFirebase) {
-                generateLocalItems(300);
-                startFirebaseSync();
-            } else {
-                items = []; // Sunucudan gelecek
-            }
+            
+            items = []; // Sunucudan gelecek
             
             cancelAnimationFrame(animationFrameId);
             gameLoop();
@@ -488,8 +453,8 @@
             render();
             updatePowerups();
             
-            // Sunucuya Veri Gönder (WebSocket Modu)
-            if (!useFirebase && ws && ws.readyState === WebSocket.OPEN) {
+            // Sunucuya Veri Gönder (Sadece WS)
+            if (ws && ws.readyState === WebSocket.OPEN) {
                  ws.send(JSON.stringify({
                      type: 'update',
                      x: Math.round(me.x),
@@ -559,19 +524,11 @@
                 }
 
                 if(d < me.width) {
-                    // Yendi
-                    if (useFirebase) {
-                        // Yerel mantık
-                        applyItemEffect(it);
-                        items.splice(i, 1);
-                        if(items.length < 50) generateLocalItems(20);
-                    } else {
-                        // Sunucuya bildir
-                        ws.send(JSON.stringify({ type: 'eat', foodId: it.id }));
-                        // İstemci tarafında tahmin (latency gizleme)
-                        applyItemEffect(it);
-                        items.splice(i, 1); 
-                    }
+                    // Yendi - Sunucuya bildir
+                    ws.send(JSON.stringify({ type: 'eat', foodId: it.id }));
+                    // İstemci tarafında tahmin (anlık yok et)
+                    applyItemEffect(it);
+                    items.splice(i, 1); 
                 }
             }
 
@@ -580,6 +537,7 @@
                 if(!en.data.h) return;
                 for(let i=0; i<en.data.h.length; i+=3) {
                     const p = en.data.h[i];
+                    // Basit çarpışma kontrolü
                     if(Math.hypot(me.x - p.x, me.y - p.y) < (me.width + (en.data.w||20))/2) {
                         die();
                     }
@@ -611,9 +569,7 @@
             document.getElementById('death-screen').classList.remove('hidden');
             document.getElementById('final-score').innerText = Math.floor(me.score);
             
-            if(useFirebase && myId) {
-                deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', myId));
-            } else if (!useFirebase && ws) {
+            if (ws) {
                 ws.send(JSON.stringify({ type: 'die' }));
             }
         }
@@ -828,7 +784,7 @@
                 if (data.type === 'tick') {
                     // Diğer oyuncuları güncelle
                     data.players.forEach(p => {
-                        if (p.id !== me.id) { // Kendimizi güncelleme (Önceden p.id !== data.id hatası vardı)
+                        if (p.id !== me.id) { // Kendimizi güncelleme
                             enemies.set(p.id, { data: p });
                         }
                     });
@@ -856,65 +812,6 @@
                     enemies.delete(data.id);
                 }
             };
-        }
-
-        // --- YEREL YEM ÜRETİMİ (SADECE FIREBASE MODU İÇİN) ---
-        function generateLocalItems(cnt) {
-            const kinds = ['donut', 'cake', 'candy'];
-            const pTypes = Object.keys(POWERUPS);
-            for(let i=0; i<cnt; i++) {
-                const isP = Math.random() < 0.05; 
-                const r = Math.random() * CONFIG.mapRadius;
-                const a = Math.random() * Math.PI * 2;
-                
-                if(isP) {
-                    items.push({
-                        id: Math.random(),
-                        type: 'powerup',
-                        pType: pTypes[Math.floor(Math.random()*pTypes.length)],
-                        x: Math.cos(a)*r, y: Math.sin(a)*r
-                    });
-                } else {
-                    items.push({
-                        id: Math.random(),
-                        type: 'food',
-                        kind: kinds[Math.floor(Math.random()*kinds.length)],
-                        x: Math.cos(a)*r, y: Math.sin(a)*r,
-                        color: `hsl(${Math.random()*360}, 80%, 60%)`
-                    });
-                }
-            }
-        }
-
-        // --- FIREBASE SYNC ---
-        function startFirebaseSync() {
-            const ref = collection(db, 'artifacts', appId, 'public', 'data', 'players');
-            onSnapshot(ref, snap => {
-                const list = [];
-                snap.docChanges().forEach(c => {
-                    const d = c.doc.data();
-                    const id = c.doc.id;
-                    if(id === myId) return;
-                    if(c.type === 'removed') enemies.delete(id);
-                    else enemies.set(id, { data: d });
-                });
-                snap.forEach(d => list.push({n:d.data().n, s:d.data().s}));
-                list.push({n: me.name, s: Math.floor(me.score)});
-                list.sort((a,b)=>b.s - a.s);
-                document.getElementById('leaderboard').innerHTML = list.slice(0,5).map((p,i)=>`
-                    <li class="flex justify-between border-b border-white/10 pb-1 ${p.n===me.name?'text-yellow-300':''}">
-                        <span>${i+1}. ${p.n.substring(0,10)}</span>
-                        <span>${p.s}</span>
-                    </li>`).join('');
-            });
-            setInterval(() => {
-                if(!isPlaying || me.dead) return;
-                const sparse = me.history.filter((_,i)=>i%5===0);
-                setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', myId), {
-                    n: me.name, s: Math.floor(me.score), skinIdx: me.skinIdx,
-                    h: sparse, w: Math.floor(me.width), ts: serverTimestamp()
-                }).catch(()=>{});
-            }, 100);
         }
     </script>
 </body>
