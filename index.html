@@ -1,1400 +1,921 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Wormate Clone - Variable Fix</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wormate.io Clone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { margin: 0; overflow: hidden; background: #0b0b12; font-family: 'Segoe UI', sans-serif; user-select: none; }
-        canvas { display: block; }
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&display=swap');
 
-        /* UI LAYERS */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #1a1a1a; 
+            font-family: 'Fredoka', sans-serif;
+            touch-action: none; 
+            user-select: none;
+        }
 
-        /* MINIMAP */
-        #minimap-container { position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; background: rgba(0,0,0,0.5); border-radius: 50%; border: 3px solid #333; overflow: hidden; }
-        #minimap { width: 100%; height: 100%; }
+        /* Oyun Arkaplanı - Wormate Izgarası */
+        #game-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #2c2f33;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.05) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 2px, transparent 2px);
+            background-size: 80px 80px;
+            z-index: -1;
+        }
 
-        /* STATS */
-        #stats-ui { position: absolute; top: 180px; left: 20px; color: white; font-size: 16px; font-weight: bold; text-shadow:1px 1px 2px black; background: rgba(0,0,0,0.4); padding: 5px 10px; border-radius: 8px; }
-        #stats-ui span { color: #ffd700; margin-left: 5px; }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
 
-        /* BUFFS */
-        #status-box { position: absolute; top: 220px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
-        .buff { background: rgba(0,0,0,0.6); color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; border-left: 5px solid; display: none; align-items: center; }
+        .interactive { pointer-events: auto; }
+
+        /* Wormate Tarzı Panel */
+        .wormate-panel {
+            background: linear-gradient(to bottom, #b4dd52 0%, #7db72f 100%);
+            border: 8px solid #fff;
+            border-radius: 40px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2), 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+        }
         
-        /* LEADERBOARD */
-        #leaderboard { position: absolute; top: 20px; right: 20px; width: 200px; background: rgba(0,0,0,0.6); color: white; padding: 15px; border-radius: 10px; }
-        #leaderboard h3 { margin: 0 0 10px 0; text-align: center; color: #ffd700; }
-        .lb-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
-        .lb-me { color: #00ff00; font-weight: bold; }
+        .wormate-panel::after {
+            content: '';
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            border: 2px dashed rgba(255,255,255,0.4);
+            border-radius: 30px;
+            pointer-events: none;
+        }
 
-        /* TIMER */
-        #clock-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; }
+        .play-btn {
+            background: linear-gradient(to bottom, #ffeb3b 0%, #fbc02d 100%);
+            border: 4px solid #fff;
+            border-radius: 50px;
+            color: #5d4037;
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.4);
+            box-shadow: 0 6px 0 #bf9000, 0 10px 10px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+        }
+        .play-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #bf9000;
+        }
 
-        /* LOBBY */
-        #lobby { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11,11,18,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; }
-        #lobby h1 { font-size: 60px; color: #ffd700; margin-bottom: 20px; text-shadow: 0 0 20px #ff9900; }
-        #nickname-input { padding: 15px; border-radius: 30px; border: 2px solid #444; background: #222; color: white; font-size: 20px; text-align: center; margin-bottom: 20px; outline: none; width: 250px; }
+        /* Powerup Kutucukları */
+        .powerup-timer {
+            display: flex;
+            align-items: center;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 30px;
+            padding: 4px 12px;
+            margin-bottom: 5px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* Mini Map */
+        #minimap-wrapper {
+            background: rgba(0, 0, 0, 0.5);
+            border: 5px solid rgba(255,255,255,0.8);
+            border-radius: 50%;
+            width: 140px;
+            height: 140px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        /* Skin Canvas */
+        #mm-skin-canv {
+            background: rgba(0,0,0,0.1);
+            border-radius: 20px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
         
-        /* LOADING */
-        #loading-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 300; }
-        .spinner { width: 50px; height: 50px; border: 5px solid #333; border-top: 5px solid #00cc66; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* OVERLAY / POPUP */
-        #game-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; flex-direction: column; justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 100; }
-        .menu-btn { padding: 15px 40px; font-size: 24px; color: white; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; transition: transform 0.2s; }
-        .btn-green { background: #00cc66; }
-        .btn-green:hover { transform: scale(1.1); background: #00ee77; }
-        .btn-blue { background: #3366ff; }
-        .btn-blue:hover { transform: scale(1.1); background: #5588ff; }
-        .btn-red { background: #cc3333; }
-        .btn-red:hover { transform: scale(1.1); background: #ff4444; }
+        /* Input Stilleri */
+        .game-input {
+            background: white;
+            border: 4px solid #8bc34a;
+            border-radius: 15px;
+            color: #444;
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 700;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .game-input:focus {
+            border-color: #4caf50;
+            outline: none;
+        }
     </style>
 </head>
 <body>
 
-    <canvas id="game"></canvas>
+    <!-- Arkaplan ve Canvas -->
+    <div id="game-bg"></div>
+    <canvas id="gameCanvas" style="display:block;"></canvas>
 
-    <!-- LOADING -->
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <h2 style="color:white; margin-top:20px;">Connecting to Server...</h2>
-    </div>
-
-    <!-- LOBBY -->
-    <div id="lobby">
-        <h1>WORMATE CLONE</h1>
-        <input type="text" id="nickname-input" placeholder="Nickname" value="Player" maxlength="12">
-        <div class="btn-group">
-            <button id="btn-online" class="menu-btn btn-green" onclick="attemptConnect()">PLAY ONLINE</button>
-            <button id="btn-offline" class="menu-btn btn-blue" onclick="startOffline()">PLAY OFFLINE</button>
-        </div>
-        <p style="color:#888; font-size:14px; margin-top:10px;">Offline mode plays against Bots only. No internet required.</p>
-    </div>
-
-    <!-- GAME UI -->
+    <!-- UI LAYER -->
     <div id="ui-layer">
-        <div id="minimap-container"><canvas id="minimap"></canvas></div>
-        <div id="stats-ui">Score: <span id="score-val">0</span> | Kills: <span id="kill-val">0</span></div>
         
-        <div id="status-box">
-            <div id="buff-x2" class="buff" style="border-color:#ff9900">2x SCORE</div>
-            <div id="buff-x5" class="buff" style="border-color:#ff3300">5x SCORE</div>
-            <div id="buff-x10" class="buff" style="border-color:#ff0066">10x SCORE</div>
-            <div id="buff-ae" class="buff" style="border-color:#00ffcc">CUTTING EDGE</div>
-            <div id="buff-spd" class="buff" style="border-color:#aa00ff">SPEED</div>
+        <!-- --- ANA MENÜ --- -->
+        <div id="login-panel" class="interactive absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg px-4 flex flex-col items-center z-50">
+            
+            <!-- Logo -->
+            <div class="mb-2 relative group cursor-default transform hover:scale-105 transition duration-300">
+                <h1 class="text-7xl md:text-8xl text-white drop-shadow-[0_8px_0_rgba(0,0,0,0.3)] font-black tracking-tighter" 
+                    style="-webkit-text-stroke: 3px #3e2723; text-shadow: 4px 4px 0 #3e2723;">
+                    <span class="text-[#ff7675]">WORM</span><span class="text-[#ffeaa7]">EIGHT</span>
+                </h1>
+            </div>
+
+            <div class="wormate-panel p-6 w-full flex flex-col items-center gap-4">
+                
+                <!-- Skin Önizleme -->
+                <div class="relative w-full flex justify-center group">
+                    <canvas id="mm-skin-canv" width="400" height="100" class="interactive cursor-pointer"></canvas>
+                    <!-- Oklar -->
+                    <button onclick="prevSkin()" class="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full text-white transition"><i class="fas fa-chevron-left"></i></button>
+                    <button onclick="nextSkin()" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 p-2 rounded-full text-white transition"><i class="fas fa-chevron-right"></i></button>
+                </div>
+
+                <!-- İsim ve Sunucu -->
+                <div class="w-full space-y-3">
+                    <input type="text" id="username" placeholder="Takma Adın" maxlength="12" 
+                        class="game-input w-full text-center text-xl py-3 placeholder-gray-400"
+                        value="Oyuncu">
+                    
+                    <div class="relative">
+                        <select id="server-select" class="game-input w-full text-center text-lg py-2 appearance-none cursor-pointer">
+                            <option value="wss://wormeight.onrender.com">🇩🇪 Almanya Sunucusu (WormEight)</option>
+                            <option value="firebase">🌍 Yedek Sunucu (Firebase)</option>
+                        </select>
+                        <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                            <i class="fas fa-caret-down"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Oyna Butonu -->
+                <button onclick="attemptPlay()" class="play-btn w-full py-3 text-3xl font-black uppercase tracking-wider interactive transform hover:scale-[1.02] active:scale-95">
+                    OYNA
+                </button>
+            </div>
+            
+            <!-- Hata Mesajı -->
+            <div id="connection-status" class="hidden mt-4 bg-red-600 text-white px-6 py-2 rounded-full font-bold border-2 border-red-800 shadow-lg text-sm">
+                <i class="fas fa-exclamation-circle mr-2"></i> <span id="conn-msg-text">Bağlantı Hatası</span>
+            </div>
         </div>
 
-        <div id="leaderboard">
-            <h3>Leaderboard <span id="online-count">(0 online)</span></h3>
-            <div id="lb-content"></div>
+        <!-- --- OYUN ARAYÜZÜ (HUD) --- -->
+        <div id="hud" class="absolute inset-0 pointer-events-none hidden">
+            
+            <!-- Sol Üst: Harita ve Itemler -->
+            <div class="absolute top-4 left-4 flex gap-4 items-start">
+                
+                <!-- Mini Map -->
+                <div id="minimap-wrapper">
+                    <canvas id="minimap" width="140" height="140"></canvas>
+                </div>
+
+                <!-- Item Timerları (Haritanın hemen sağına gelir) -->
+                <div id="powerup-container" class="flex flex-col items-start w-[150px] pt-2">
+                    <!-- Javascript ile doldurulur -->
+                </div>
+            </div>
+
+            <!-- Sağ Üst: Lider Tablosu -->
+            <div class="absolute top-4 right-4 w-56">
+                <div class="bg-black/40 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                    <h3 class="text-white/90 text-xs uppercase mb-2 font-bold tracking-widest text-center border-b border-white/10 pb-1">Liderler</h3>
+                    <ul id="leaderboard" class="space-y-1 text-sm font-bold text-white shadow-black drop-shadow-md">
+                        <li class="flex justify-between text-yellow-300"><span>1. Yükleniyor...</span><span>0</span></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Sol Alt: Skor -->
+            <div class="absolute bottom-6 left-6">
+                <div class="bg-black/40 backdrop-blur rounded-2xl px-5 py-3 border-2 border-white/20 transform hover:scale-110 transition-transform origin-bottom-left">
+                    <span class="text-gray-300 text-[10px] uppercase block font-bold tracking-wider">Kütle</span>
+                    <span id="score-display" class="text-4xl text-white font-black drop-shadow-md">10</span>
+                </div>
+            </div>
+            
+            <!-- Alt Orta: Kontrol Bilgisi -->
+            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/50 text-[10px] font-sans text-center">
+                wormeight.io clone
+            </div>
         </div>
-        <div id="clock-display">00:00</div>
+
+        <!-- --- ÖLÜM EKRANI --- -->
+        <div id="death-screen" class="interactive hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-900/95 backdrop-blur-md border-4 border-white/20 rounded-3xl p-8 text-center min-w-[320px] shadow-2xl">
+            <h2 class="text-5xl text-[#ff7675] mb-2 drop-shadow-md font-black">ELENDİN!</h2>
+            <div class="bg-white/10 rounded-xl p-4 mb-6">
+                <p class="text-gray-300 text-xs uppercase tracking-widest">Son Kütle</p>
+                <p class="text-white text-4xl font-bold text-[#ffeaa7]" id="final-score">0</p>
+            </div>
+            <button onclick="location.reload()" class="play-btn w-full py-3 text-xl font-bold uppercase">
+                Tekrar Oyna
+            </button>
+            <div class="mt-4 text-white/40 text-xs">
+                Reklamlar yüklenemedi.
+            </div>
+        </div>
     </div>
 
-    <!-- OVERLAY / POPUP (Network Error / Game Over) -->
-    <div id="game-over">
-        <h1 id="overlay-title" style="font-size: 50px; color: #ff3333;">GAME OVER</h1>
-        <p id="overlay-msg" style="font-size: 24px;">Length: <span id="final-score" style="color: #ffd700;">0</span></p>
-        <div class="btn-group">
-            <button id="btn-home" class="menu-btn btn-blue" onclick="goHome()">EXIT TO LOBBY</button>
-            <button id="btn-play" class="menu-btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
-        </div>
-    </div>
+    <!-- Firebase SDK (Yedek) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    <script>
-        // ================= SERVER CONNECTION =================
-        const SERVER_URL = "wss://snake-server-3bnw.onrender.com";
-        
-        let ws = null;
-        let myId = null;
-        let remotePlayers = {}; 
-        
-        let lastPingTime = Date.now();
-        const PING_TIMEOUT = 5000;
-        let connectionActive = false;
-        let isOnlineMode = true;
+        // Firebase Config
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        function handleMessage(data) {
-            if (data.type === 'init') {
-                myId = data.selfId;
-                document.getElementById("loading-screen").style.display = "none";
-                document.getElementById("ui-layer").style.display = "block";
-                initGame();
-            }
-            else if (data.type === 'update') {
-                if (data.id !== myId) {
-                    remotePlayers[data.id] = data;
-                }
-            }
-            else if (data.type === 'remove') {
-                delete remotePlayers[data.id];
-            }
-            else if (data.type === 'spawn_food') {
-                if (data.food && Array.isArray(data.food)) {
-                    let now = Date.now();
-                    data.food.forEach(f => {
-                        food.push({
-                                            x: f.x,
-                                            y: f.y,
-                                            r: f.r,
-                                            color: f.color,
-                                            type: 0,
-                                            angle: Math.random() * Math.PI * 2,
-                                            spawnTime: now,
-                                            isDrops: true,
-                                            noGlow: false,
-                                            vx: 0, vy: 0
-                                        });
-                            });
-                }
-            }
-            else if (data.type === 'ping') {
-                lastPingTime = Date.now();
-                connectionActive = true;
-            }
-            else if (data.type === 'die') {
-                triggerGameOver();
-            }
-        }
+        // --- OYUN AYARLARI (WORMATE FİZİKLERİ) ---
+        const CONFIG = {
+            mapRadius: 3000,
+            baseSpeed: 4.0,  
+            boostSpeed: 8.5,
+            turnSpeedFactor: 0.005, 
+            minTurnSpeed: 0.04,
+            widthBase: 24,
+            growthFactor: 0.5,
+            skins: [
+                { id: 's1', type: 'stripe', c1: '#ff9f43', c2: '#ee5253' }, 
+                { id: 's2', type: 'spot', c1: '#0abde3', c2: '#5f27cd' },   
+                { id: 's3', type: 'solid', c1: '#10ac84', c2: '#1dd1a1' },  
+                { id: 's4', type: 'stripe', c1: '#ff6b6b', c2: '#c8d6e5' }, 
+                { id: 's5', type: 'spot', c1: '#feca57', c2: '#ff9f43' }    
+            ]
+        };
 
-        function attemptConnect() {
-            isOnlineMode = true;
-            let loadingScreen = document.getElementById("loading-screen");
-            let lobby = document.getElementById("lobby");
-            let input = document.getElementById("nickname-input");
-            
-            if (!loadingScreen || !lobby || !input) {
-                console.error("HTML Elements missing");
-                return;
-            }
+        const POWERUPS = {
+            '2x':      { color: '#ff9ff3', label: '2x',      icon: 'fa-star',       duration: 60 },
+            '5x':      { color: '#feca57', label: '5x',      icon: 'fa-crown',      duration: 40 },
+            '10x':     { color: '#ff6b6b', label: '10x',     icon: 'fa-gem',        duration: 20 },
+            'magnet':  { color: '#54a0ff', label: 'Mıknatıs',icon: 'fa-magnet',     duration: 40 },
+            'agility': { color: '#00d2d3', label: 'Çeviklik',icon: 'fa-wind',       duration: 40 },
+            'speed':   { color: '#5f27cd', label: 'Hız',     icon: 'fa-bolt',       duration: 40 }
+        };
 
-            playerName = input.value.trim() || "Player";
-            lobby.style.display = "none"; 
-            loadingScreen.style.display = "flex"; 
-            
-            connectToServer();
-        }
+        // Değişkenler
+        let canvas, ctx, mmCanvas, mmCtx, skinCanvas, skinCtx;
+        let myId = null, ws = null;
+        let isPlaying = false, isBoosting = false, useFirebase = false;
+        let mouse = { x: 0, y: 0, worldAngle: 0 };
+        let camera = { x: 0, y: 0, scale: 0.8 };
+        let animationFrameId;
 
-        function startOffline() {
-            isOnlineMode = false;
-            document.getElementById("loading-screen").style.display = "none";
-            document.getElementById("ui-layer").style.display = "block";
-            document.getElementById("lobby").style.display = "none";
-            initGame();
-        }
+        // Oyuncu
+        let me = {
+            id: null, // WebSocket ID için
+            x: 0, y: 0, angle: 0, history: [],
+            length: 20, score: 10, width: CONFIG.widthBase, skinIdx: 0,
+            effects: {}, dead: false
+        };
+        let enemies = new Map();
+        let items = [];
 
-        function connectToServer() {
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
+        // --- INIT ---
+        window.onload = () => {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d', { alpha: false });
+            mmCanvas = document.getElementById('minimap');
+            mmCtx = mmCanvas.getContext('2d');
+            skinCanvas = document.getElementById('mm-skin-canv');
+            skinCtx = skinCanvas.getContext('2d');
 
-            let connectionTimeout = setTimeout(() => {
-                if (connectionActive) return;
-                handleNetworkError("CONNECTION ERROR", "Connection timed out. Check your internet or try 'Play Offline'.");
-            }, 5000);
+            resize();
+            window.addEventListener('resize', resize);
 
-            try {
-                ws = new WebSocket(SERVER_URL);
+            // Girdiler
+            window.addEventListener('mousemove', e => {
+                const cx = window.innerWidth / 2;
+                const cy = window.innerHeight / 2;
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+                mouse.worldAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+            });
+            window.addEventListener('mousedown', () => isBoosting = true);
+            window.addEventListener('mouseup', () => isBoosting = false);
+            canvas.addEventListener('touchstart', (e) => { isBoosting = true; updateTouch(e); }, {passive:false});
+            canvas.addEventListener('touchend', () => isBoosting = false);
+            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateTouch(e); }, {passive:false});
 
-                ws.onopen = () => { 
-                    clearTimeout(connectionTimeout);
-                    console.log("Connected to Game Server");
-                    lastPingTime = Date.now();
-                    connectionActive = true;
-                };
-                
-                ws.onmessage = (event) => {
-                    let data = JSON.parse(event.data);
-                    handleMessage(data);
-                };
-                
-                ws.onclose = () => {
-                    clearTimeout(connectionTimeout);
-                    console.log("Disconnected from Server");
-                    connectionActive = false;
-                    if (isGameRunning) {
-                        handleNetworkError("NETWORK ERROR", "Connection Lost. Please check your internet.");
-                    }
-                };
+            animateSkinPreview();
 
-                ws.onerror = (err) => {
-                    clearTimeout(connectionTimeout);
-                    console.error("WebSocket Error:", err);
-                    connectionActive = false;
-                    handleNetworkError("CONNECTION ERROR", "Could not connect to server.");
-                };
-            } catch (e) {
-                handleNetworkError("ERROR", "Failed to initialize WebSocket.");
-                goHome();
-            }
-        }
-
-        function handleNetworkError(title, msg, isError = true) {
-            isGameRunning = false;
-            document.getElementById("ui-layer").style.display = 'none';
-            
-            let overlay = document.getElementById('game-over');
-            overlay.style.display = 'flex';
-            
-            document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; 
-
-            let elBtnHome = document.getElementById("btn-home");
-            let elBtnPlay = document.getElementById("btn-play");
-
-            if (isError) {
-                elBtnPlay.innerText = "RETRY";
-                elBtnHome.innerText = "PLAY OFFLINE";
-            } else {
-                elBtnPlay.innerText = "PLAY AGAIN";
-                elBtnHome.innerText = "EXIT TO LOBBY";
-            }
-
-            elBtnPlay.onclick = () => { overlay.style.display = 'none'; attemptConnect(); };
-            elBtnHome.onclick = () => { overlay.style.display = 'none'; startOffline(); };
-        }
-
-        function goHome() {
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
-            location.reload();
-        }
-        
-        function restartGame() {
-            let overlay = document.getElementById("game-over");
-            overlay.style.display = 'none';
-            
-            let elBtnPlay = document.getElementById("btn-play");
-            let elBtnHome = document.getElementById("btn-home");
-            elBtnPlay.innerText = "PLAY AGAIN";
-            elBtnHome.innerText = "GO HOME";
-            
-            if (isOnlineMode) attemptConnect();
-            else startOffline();
-        }
-
-        /* ================= GLOBAL SETUP ================= */
-        let canvas = document.getElementById("game");
-        let ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-        let minimapCanvas = document.getElementById("minimap");
-        let miniCtx = minimapCanvas.getContext("2d", { desynchronized: true });
+            // Firebase Auth
+            signInAnonymously(auth).then(u => {
+                myId = u.user.uid;
+            });
+        };
 
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            minimapCanvas.width = 150;
-            minimapCanvas.height = 150;
         }
-        resize();
-        window.addEventListener("resize", resize);
+        function updateTouch(e) {
+            const t = e.touches[0];
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            mouse.worldAngle = Math.atan2(t.clientY - cy, t.clientX - cx);
+        }
 
-        /* ================= CONFIGURATION ================= */
-        const SEGMENT_SPACING = 5;
-        const PATH_SPACING = 5;
-        const MAP_RADIUS = 6000;
+        // --- SKIN ---
+        window.prevSkin = () => { me.skinIdx = (me.skinIdx - 1 + CONFIG.skins.length) % CONFIG.skins.length; };
+        window.nextSkin = () => { me.skinIdx = (me.skinIdx + 1) % CONFIG.skins.length; };
 
-        const BASE_SPEED = 2.0;
-        const MANUAL_BOOST_ADD = 2.2;
-        const POWERUP_SPEED_MULT = 1.5;
+        function animateSkinPreview() {
+            let offset = 0;
+            function loop() {
+                offset += 0.1;
+                skinCtx.clearRect(0,0,400,100);
+                
+                const skin = CONFIG.skins[me.skinIdx];
+                const cx = 200, cy = 50;
+                
+                for(let i=0; i<30; i++) {
+                    const x = cx - (i*10) + 100;
+                    const y = cy + Math.sin(offset + i*0.2) * 15;
+                    const w = 22;
 
-        const TURN_SPEED_WIDE = 0.075;
-        const TURN_SPEED_BOOST = 0.12;
-        const TURN_SPEED_SHARP = 0.18;
-        const MASS_LOSS_PER_TICK = 0.03;
+                    skinCtx.beginPath();
+                    skinCtx.arc(x, y, w/2, 0, Math.PI*2);
+                    
+                    if(skin.type === 'solid') skinCtx.fillStyle = skin.c1;
+                    else if(skin.type === 'stripe') skinCtx.fillStyle = (i%3===0) ? skin.c2 : skin.c1;
+                    else if(skin.type === 'spot') skinCtx.fillStyle = skin.c1;
+                    
+                    skinCtx.fill();
+                    
+                    const g = skinCtx.createRadialGradient(x-3, y-3, 1, x, y, w/2);
+                    g.addColorStop(0, 'rgba(255,255,255,0.4)');
+                    g.addColorStop(1, 'transparent');
+                    skinCtx.fillStyle = g;
+                    skinCtx.fill();
 
-        const UNDER_RATIO = 0.60;
-        const COLLISION_OVER_RATIO = 1.00;
-
-        /* ================= GAME VARIABLES ================= */
-        let isGameRunning = false;
-        let isGameOver = false;
-        let gameTime = 0;
-        let startTime = 0;
-        let zoom = 1.0;
-        let playerName = "Player";
-        let playerColor = "#ff66cc";
-
-        let head = { x: 0, y: 0, angle: 0 };
-        let length = 50;
-        let path = [];
-        let food = [];
-        let powerups = [];
-        let killCount = 0;
-        let hsCount = 0;
-        let playerIsUnder = false;
-
-        let expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
-
-        let lastTime = performance.now();
-        let frameCount = 0;
-        let lastFpsUpdate = 0;
-
-        let bots = Array.from({ length: 25 }, (_, i) => ({
-            name: `Bot_${String(i + 1).padStart(3, '0')}`,
-            score: 0,
-            x: 0, y: 0,
-            angle: 0,
-            path: [],
-            color: "#00ff00"
-        }));
-
-        /* ================= INPUT HANDLING ================= */
-        let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
-        let moving = true;
-        let boosting = false;
-
-        window.addEventListener("mousemove", e => {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-        });
-        window.addEventListener("mousedown", () => boosting = true);
-        window.addEventListener("mouseup", () => boosting = false);
-
-        window.addEventListener("wheel", e => {
-            let zoomSpeed = 0.001;
-            zoom -= e.deltaY * zoomSpeed;
-            if (zoom < 0.3) zoom = 0.3;
-            if (zoom > 1.5) zoom = 1.5;
-        }, { passive: true });
-
-        /* ================= GAME LIFECYCLE ================= */
-
-        function initGame() {
-            food.length = 0;
-            powerups.length = 0;
-            bots.forEach(resetBot);
-
-            let safe = false;
-            let attempts = 0;
-            let startX = 0, startY = 0;
-
-            while (!safe && attempts < 200) {
-                startX = (Math.random() - 0.5) * (MAP_RADIUS * 1.8);
-                startY = (Math.random() - 0.5) * (MAP_RADIUS * 1.8);
-
-                let tooClose = false;
-                for (const bot of bots) {
-                    if (Math.hypot(startX - bot.x, startY - bot.y) < 500) { tooClose = true; break; }
+                    if(skin.type === 'spot' && i%4===0) {
+                        skinCtx.beginPath(); skinCtx.arc(x,y, 5, 0, Math.PI*2); 
+                        skinCtx.fillStyle = skin.c2; skinCtx.fill();
+                    }
                 }
-                if (!tooClose) safe = true;
-                attempts++;
+                
+                const hx = cx + 100, hy = cy + Math.sin(offset)*15;
+                skinCtx.fillStyle='white';
+                skinCtx.beginPath(); skinCtx.arc(hx+4, hy-6, 7, 0, Math.PI*2); skinCtx.fill();
+                skinCtx.beginPath(); skinCtx.arc(hx+4, hy+6, 7, 0, Math.PI*2); skinCtx.fill();
+                skinCtx.fillStyle='black';
+                skinCtx.beginPath(); skinCtx.arc(hx+7, hy-6, 3, 0, Math.PI*2); skinCtx.fill();
+                skinCtx.beginPath(); skinCtx.arc(hx+7, hy+6, 3, 0, Math.PI*2); skinCtx.fill();
+
+                requestAnimationFrame(loop);
             }
-
-            head = { x: startX, y: startY, angle: Math.random() * Math.PI * 2 };
-            length = 50;
-
-            path = [];
-            for (let i = 0; i < length * SEGMENT_SPACING; i += SEGMENT_SPACING) {
-                path.push({ x: startX, y: startY });
-            }
-
-            food = [];
-            powerups = [];
-            killCount = 0;
-            updateStatsUI();
-
-            isGameOver = false;
-            isGameRunning = true;
-            startTime = Date.now();
-            lastTime = performance.now();
-
-            playerColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
-
-            expiries = { x2: 0, x5: 0, x10: 0, ae: 0, spd: 0 };
-
-            for (let i = 0; i < 3000; i++) spawnFood();
-            for (let i = 0; i < 120; i++) spawnPowerup();
-
-            document.getElementById('game-over').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'block';
+            loop();
         }
 
-        function resetBot(bot) {
-            bot.x = (Math.random() - 0.5) * MAP_RADIUS * 1.5;
-            bot.y = (Math.random() - 0.5) * MAP_RADIUS * 1.5;
-            bot.angle = Math.random() * Math.PI * 2;
-            bot.path = [];
-            bot.length = 700;
-            bot.score = Math.floor(bot.length * 10);
-            bot.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
-            for (let k = 0; k < bot.length * SEGMENT_SPACING; k += SEGMENT_SPACING) {
-                bot.path.push({ x: bot.x, y: bot.y });
-            }
-        }
+        // --- BAĞLANTI VE OYUN BAŞLATMA ---
+        window.attemptPlay = () => {
+            const srv = document.getElementById('server-select').value;
+            const name = document.getElementById('username').value || "Worm";
+            me.name = name;
 
-        /* ================= ENTITY MANAGEMENT ================= */
-        function spawnFood(x, y, val, colorOverride) {
-            let type = Math.floor(Math.random() * 3);
-            let r = val || (7 + Math.random() * 3);
-            let now = Date.now();
+            const statusEl = document.getElementById('connection-status');
+            const statusText = document.getElementById('conn-msg-text');
+            statusEl.classList.remove('hidden');
+            statusEl.className = "mt-4 bg-yellow-600 text-white px-6 py-2 rounded-full font-bold border-2 border-yellow-800 shadow-lg text-sm";
+            statusText.innerText = "Sunucuya bağlanılıyor...";
 
-            if (x !== undefined && y !== undefined) {
-                food.push({
-                    x: x, y: y,
-                    r: r * 1.15,
-                    color: colorOverride || `hsl(${Math.random() * 360}, 100%, 50%)`,
-                    type: type,
-                    angle: Math.random() * Math.PI * 2,
-                    spawnTime: now,
-                    isDrops: true,
-                    noGlow: false,
-                    vx: 0, vy: 0
-                });
-                return;
-            }
-
-            let angle = Math.random() * Math.PI * 2;
-            let dist = Math.sqrt(Math.random()) * (MAP_RADIUS - 50);
-            food.push({
-                x: Math.cos(angle) * dist, y: Math.sin(angle) * dist,
-                r: r,
-                color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-                type: type,
-                angle: Math.random() * Math.PI * 2,
-                spawnTime: 0,
-                isDrops: false,
-                vx: 0, vy: 0
-            });
-        }
-
-        function spawnPowerup() {
-            let angle = Math.random() * Math.PI * 2;
-            let r = Math.sqrt(Math.random()) * (MAP_RADIUS - 100);
-            let types = ['2x', '5x', '10x', 'ae', 'spd'];
-            let type = types[Math.floor(Math.random() * types.length)];
-            let color = '#fff', label = type;
-
-            if (type === '2x') color = '#ff9900';
-            if (type === '5x') color = '#ff3300';
-            if (type === '10x') color = '#ff0066';
-            if (type === 'ae') { color = '#00ffcc'; label = "Turn"; }
-            if (type === 'spd') { color = '#aa00ff'; label = "Speed"; }
-
-            powerups.push({
-                x: Math.cos(angle) * r, y: Math.sin(angle) * r,
-                type: type, label: label,
-                color: color, r: 15
-            });
-        }
-
-        function getRenderedBodyPoints(path, headX, headY, maxLen) {
-            let smooth = path;
-            let h = { x: headX, y: headY };
-
-            let points = [];
-            let dist = 0;
-            let target = SEGMENT_SPACING;
-            let prev = h;
-
-            for (let i = smooth.length - 1; i >= 0; i--) {
-                let curr = smooth[i];
-                let d = Math.hypot(prev.x - curr.x, prev.y - curr.y);
-
-                while (dist + d >= target) {
-                    let t = (target - dist) / d;
-                    points.push({
-                        x: prev.x + (curr.x - prev.x) * t,
-                        y: prev.y + (curr.y - prev.y) * t
-                    });
-                    target += SEGMENT_SPACING;
-                    if (points.length >= maxLen) return points;
-                }
-                dist += d;
-                prev = curr;
-            }
-            return points;
-        }
-
-        function explodeWorm(pathArr, skinColor) {
-            let body = getRenderedBodyPoints(pathArr, pathArr[pathArr.length - 1]?.x || 0, pathArr[pathArr.length - 1]?.y || 0, pathArr.length);
-            let i = 0;
-
-            function spawnBatch() {
-                let count = 0;
-                while (i < body.length && count < 20) {
-                    let p = body[i];
-                    spawnFood(
-                        p.x + (Math.random() - 0.5) * 2,
-                        p.y + (Math.random() - 0.5) * 2,
-                        5 + Math.random() * 10,
-                        skinColor
-                    );
-                    i += 4;
-                    count++;
-                }
-                if (i < body.length) {
-                    requestAnimationFrame(spawnBatch);
-                }
-            }
-
-            spawnBatch();
-        }
-
-        /* ================= UPDATE LOOP ================= */
-        function update(dt) {
-            if (isOnlineMode && isGameRunning) {
-                let now = Date.now();
-                if (now - lastPingTime > PING_TIMEOUT) {
-                    handleNetworkError("NETWORK ERROR", "Connection Lost. Check your internet.");
-                    return;
-                }
-            }
-
-            if (isGameOver || !isGameRunning) return;
-
-            let now = Date.now();
-            gameTime += 0.05 * dt;
-
-            // Clock Update
-            let elapsed = Math.floor((now - startTime) / 1000);
-            let mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-            let secs = (elapsed % 60).toString().padStart(2, '0');
-            document.getElementById('clock-display').innerText = `${mins}:${secs}`;
-
-            // Buffs
-            updateBuffUI('buff-x2', 'time-x2', expiries.x2, now);
-            updateBuffUI('buff-x5', 'time-x5', expiries.x5, now);
-            updateBuffUI('buff-x10', 'time-x10', expiries.x10, now);
-            updateBuffUI('buff-ae', 'time-ae', expiries.ae, now);
-            updateBuffUI('buff-spd', 'time-spd', expiries.spd, now);
-
-            let currentMult = 1;
-            if (now < expiries.x2) currentMult *= 2;
-            if (now < expiries.x5) currentMult *= 5;
-            if (now < expiries.x10) currentMult *= 10;
-
-            let spd = BASE_SPEED;
-
-            if (boosting && length > 20) {
-                let boostAmount = MANUAL_BOOST_ADD;
-                if (now < expiries.spd) boostAmount *= POWERUP_SPEED_MULT;
-
-                spd += boostAmount;
-                length -= MASS_LOSS_PER_TICK * dt;
-            }
-
-            let isSharp = (now < expiries.ae);
-
-            // Player Turning
-            let dx = mouse.x - canvas.width / 2;
-            let dy = mouse.y - canvas.height / 2;
-            let distToMouse = Math.hypot(dx, dy);
-
-            if (distToMouse > 20) {
-                let targetAngle = Math.atan2(dy, dx);
-                let baseTurnSpeed = TURN_SPEED_WIDE;
-                if (boosting) baseTurnSpeed = TURN_SPEED_BOOST;
-                if (isSharp) baseTurnSpeed = TURN_SPEED_SHARP;
-
-                let turnSpd = baseTurnSpeed * dt;
-                if (turnSpd > 0.35) turnSpd = 0.35;
-                head.angle = lerpAngle(head.angle, targetAngle, turnSpd);
-            }
-
-            // Player Movement
-            if (moving) {
-                head.x += Math.cos(head.angle) * spd * dt;
-                head.y += Math.sin(head.angle) * spd * dt;
-
-                let last = path[path.length - 1];
-                if (!last || Math.hypot(head.x - last.x, head.y - last.y) >= PATH_SPACING) {
-                    path.push({ x: head.x, y: head.y });
-                }
-            }
-
-            let maxPath = length * SEGMENT_SPACING + 150;
-            if (path.length > maxPath) path.splice(0, path.length - maxPath);
-
-            if (ws && ws.readyState === WebSocket.OPEN && isOnlineMode) {
-                if (now % 50 < 17) {
-                    let payload = {
-                        type: 'update',
-                        x: head.x,
-                        y: head.y,
-                        angle: head.angle,
-                        length: length,
-                        path: path,
-                        name: playerName,
-                        color: playerColor
+            if(srv === 'firebase') {
+                useFirebase = true;
+                startGame();
+            } else {
+                try {
+                    ws = new WebSocket(srv);
+                    ws.onopen = () => {
+                        console.log("WS Connected");
+                        useFirebase = false;
+                        statusEl.classList.add('hidden');
+                        startWebSocketSync();
+                        startGame();
                     };
-                    ws.send(JSON.stringify(payload));
+                    ws.onerror = () => {
+                        console.log("WS Error");
+                        statusEl.className = "mt-4 bg-red-600 text-white px-6 py-2 rounded-full font-bold border-2 border-red-800 shadow-lg text-sm";
+                        statusText.innerText = "Sunucu Hatası! Firebase'e geçiliyor...";
+                        setTimeout(() => {
+                            useFirebase = true; 
+                            startGame();
+                        }, 1500);
+                    };
+                    ws.onclose = () => {
+                        if(isPlaying && !useFirebase) {
+                            die(); 
+                            alert("Sunucu bağlantısı koptu.");
+                        }
+                    };
+                } catch(e) {
+                    useFirebase = true;
+                    startGame();
                 }
             }
+        };
 
-            if (Math.hypot(head.x, head.y) > MAP_RADIUS) {
-                triggerGameOver();
+        function startGame() {
+            isPlaying = true;
+            document.getElementById('login-panel').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            me.score = 10;
+            me.effects = {};
+            me.dead = false;
+            
+            // Rastgele Doğuş
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.random() * CONFIG.mapRadius * 0.5;
+            me.x = Math.cos(a) * r;
+            me.y = Math.sin(a) * r;
+            me.angle = Math.random() * Math.PI * 2;
+
+            me.history = [];
+            for(let i=0; i<20; i++) me.history.push({x: me.x, y: me.y});
+
+            // Firebase modundaysak yemleri biz üretelim, WS ise sunucudan bekleyelim
+            if(useFirebase) {
+                generateLocalItems(300);
+                startFirebaseSync();
+            } else {
+                items = []; // Sunucudan gelecek
+            }
+            
+            cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        // --- OYUN DÖNGÜSÜ ---
+        function gameLoop() {
+            if(!isPlaying) return;
+            
+            updatePhysics();
+            render();
+            updatePowerups();
+            
+            // Sunucuya Veri Gönder (WebSocket Modu)
+            if (!useFirebase && ws && ws.readyState === WebSocket.OPEN) {
+                 ws.send(JSON.stringify({
+                     type: 'update',
+                     x: Math.round(me.x),
+                     y: Math.round(me.y),
+                     angle: me.angle,
+                     score: me.score,
+                     name: me.name,
+                     skin: me.skinIdx,
+                     width: me.width,
+                     history: me.history.filter((_, i) => i % 5 === 0)
+                 }));
+            }
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- FİZİK ---
+        function updatePhysics() {
+            const now = Date.now();
+
+            for(let k in me.effects) {
+                if(me.effects[k] < now) delete me.effects[k];
+            }
+
+            let speed = CONFIG.baseSpeed;
+            if(me.effects['speed']) speed *= 1.5;
+            if(isBoosting && me.score > 15) {
+                speed = CONFIG.boostSpeed;
+                me.score -= 0.2; 
+                if(me.score < 10) me.score = 10;
+            }
+
+            let turnSpeed = Math.max(CONFIG.minTurnSpeed, 0.12 - (me.width * 0.001));
+            if(me.effects['agility']) turnSpeed *= 2.0;
+
+            let diff = mouse.worldAngle - me.angle;
+            while(diff <= -Math.PI) diff += Math.PI*2;
+            while(diff > Math.PI) diff -= Math.PI*2;
+            
+            if(Math.abs(diff) < turnSpeed) me.angle = mouse.worldAngle;
+            else me.angle += Math.sign(diff) * turnSpeed;
+
+            me.x += Math.cos(me.angle) * speed;
+            me.y += Math.sin(me.angle) * speed;
+
+            if(Math.hypot(me.x, me.y) > CONFIG.mapRadius) {
+                die();
                 return;
             }
 
-            // Food Physics + Collision
-            for (let i = food.length - 1; i >= 0; i--) {
-                let f = food[i];
+            me.history.unshift({x: me.x, y: me.y});
+            me.width = CONFIG.widthBase + Math.sqrt(me.score)*0.6;
+            const targetLen = 20 + Math.floor(me.score * 2); 
+            while(me.history.length > targetLen) me.history.pop();
 
-                if (f.isDrops && (now - f.spawnTime > 40000)) {
-                    food.splice(i, 1);
-                    continue;
+            // Yem Kontrolü
+            let pickupRange = me.width * 1.5;
+            if(me.effects['magnet']) pickupRange *= 3.5;
+
+            for(let i=items.length-1; i>=0; i--) {
+                const it = items[i];
+                const d = Math.hypot(it.x - me.x, it.y - me.y);
+
+                if(d < pickupRange) {
+                    it.x += (me.x - it.x) * 0.15;
+                    it.y += (me.y - it.y) * 0.15;
                 }
 
-                if (Math.abs(head.x - f.x) > 50 || Math.abs(head.y - f.y) > 50) continue;
-
-                if (Math.hypot(head.x - f.x, head.y - f.y) < getWormRadius(length) + f.r + 10) {
-                    let growthFactor = Math.max(0.1, 50 / length);
-                    length += (f.r / 4) * currentMult * growthFactor;
-
-                    food.splice(i, 1);
-                    if (!f.isDrops) spawnFood();
-                }
-            }
-
-            // Powerups Collision
-            for (let i = powerups.length - 1; i >= 0; i--) {
-                let p = powerups[i];
-                p.x += Math.cos(gameTime + i) * 0.5 * dt;
-                if (Math.abs(head.x - p.x) > 50 || Math.abs(head.y - p.y) > 50) continue;
-                if (Math.hypot(head.x - p.x, head.y - p.y) < getWormRadius(length) + p.r + 10) {
-                    applyPowerup(p.type);
-                    powerups.splice(i, 1);
-                    setTimeout(spawnPowerup, 5000);
-                }
-            }
-
-            updateBots(dt);
-            checkCombat();
-            updateLeaderboardUI();
-        }
-
-        function updateBots(dt) {
-            bots.forEach(bot => {
-                if (Math.random() < 0.05 * dt) {
-                    bot.targetAngle = (Math.random() * Math.PI * 2);
-                }
-                if (Math.hypot(bot.x, bot.y) > MAP_RADIUS - 200) {
-                    bot.targetAngle = Math.atan2(-bot.y, -bot.x);
-                }
-                bot.angle = lerpAngle(bot.angle, bot.targetAngle || bot.angle, 0.05 * dt);
-                bot.x += Math.cos(bot.angle) * BASE_SPEED * dt;
-                bot.y += Math.sin(bot.angle) * BASE_SPEED * dt;
-
-                let last = bot.path[bot.path.length - 1];
-                if (!last || Math.hypot(bot.x - last.x, bot.y - last.y) >= PATH_SPACING) {
-                    bot.path.push({ x: bot.x, y: bot.y });
-                }
-                let maxPath = bot.length * SEGMENT_SPACING + 150;
-                if (bot.path.length > maxPath) bot.path.splice(0, bot.path.length - maxPath);
-
-                bot.score = Math.floor(bot.length * 10);
-            });
-        }
-
-        /* ================= COMBAT LOGIC ================= */
-        function getCollisionPath(path, headX, headY, maxLen) {
-            return getRenderedBodyPoints(path, headX, headY, maxLen);
-        }
-
-        function isHeadUnderEnemy(head, enemyCollPath, enemyLen) {
-            let enemyR = getWormRadius(enemyLen);
-            let underR = enemyR * UNDER_RATIO;
-            let skipTail = Math.min(30, Math.floor(enemyCollPath.length * 0.15));
-
-            for (let k = 0; k < enemyCollPath.length - skipTail; k += 2) {
-                let p = enemyCollPath[k];
-                let dx = head.x - p.x;
-                let dy = head.y - p.y;
-                if (Math.abs(dx) > underR + 2 || Math.abs(dy) > underR + 2) continue;
-                if (Math.hypot(dx, dy) < underR) return true;
-            }
-            return false;
-        }
-
-        function getNeckByDistance(collPathHeadFirst, maxDist) {
-            let neck = [];
-            let dist = 0;
-            for (let i = 0; i < collPathHeadFirst.length; i++) {
-                if (i > 0) {
-                    dist += Math.hypot(
-                        collPathHeadFirst[i].x - collPathHeadFirst[i - 1].x,
-                        collPathHeadFirst[i].y - collPathHeadFirst[i - 1].y
-                    );
-                }
-                if (dist > maxDist) break;
-                neck.push(collPathHeadFirst[i]);
-            }
-            return neck;
-        }
-
-        function checkCombat() {
-            if (isGameOver || !isGameRunning) return;
-
-            playerIsUnder = false;
-
-            let myR = getWormRadius(length);
-
-            let checkHit = (attackerHead, victimPath, victimLen, attackerHeadRadius) => {
-                let victimR = getWormRadius(victimLen);
-                let underR = victimR * UNDER_RATIO;
-                let overR = victimR * COLLISION_OVER_RATIO + attackerHeadRadius * 0.05;
-                let skipTail = Math.min(6, Math.floor(victimPath.length * 0.2));
-
-                for (let k = 0; k < victimPath.length - skipTail; k += 3) {
-                    let p = victimPath[k];
-                    let dx = attackerHead.x - p.x;
-                    let dy = attackerHead.y - p.y;
-                    if (Math.abs(dx) > overR + 6 || Math.abs(dy) > overR + 6) continue;
-
-                    let d = Math.hypot(dx, dy);
-                    if (d < underR) continue;
-                    if (d < overR) return true;
-                }
-                return false;
-            };
-
-            let checkHeadshotTouch = (attackerHead, victimNeckPath, victimLen, attackerLen) => {
-                let victimR = getWormRadius(victimLen);
-                let attackerR = getWormRadius(attackerLen);
-                let hsR = victimR * 0.60 + attackerR * 0.60;
-
-                for (let k = 0; k < victimNeckPath.length; k += 2) {
-                    let p = victimNeckPath[k];
-                    let dx = attackerHead.x - p.x;
-                    let dy = attackerHead.y - p.y;
-                    if (Math.abs(dx) > hsR + 4 || Math.abs(dy) > hsR + 4) continue;
-                    if (Math.hypot(dx, dy) < hsR) return true;
-                }
-                return false;
-            };
-
-            let resolveHeadOn = (a, b, aLen, bLen, aColl, bColl) => {
-                let dist = Math.hypot(a.x - b.x, a.y - b.y);
-                let minR = Math.min(getWormRadius(aLen), getWormRadius(bLen));
-
-                if (dist < (minR * 2.2) && dist > (minR * 0.55)) {
-                    let distA = Math.hypot(a.x, a.y);
-                    let distB = Math.hypot(b.x, b.y);
-                    let dotA = (-a.x * Math.cos(a.angle)) + (-a.y * Math.sin(a.angle));
-                    let dotB = (-b.x * Math.cos(b.angle)) + (-b.y * Math.sin(b.angle));
-
-                    if (distA > distB && dotA > 0) return 1;
-                    if (distB > distA && dotB > 0) return 2;
-                    return 3;
-                }
-
-                let neckDistA = getWormRadius(aLen) * 2.2;
-                let neckDistB = getWormRadius(bLen) * 2.2;
-                let aNeck = getNeckByDistance(aColl, neckDistA);
-                let bNeck = getNeckByDistance(bColl, neckDistB);
-
-                let aHitsBNeck = checkHeadshotTouch(a, bNeck, bLen, aLen);
-                let bHitsANeck = checkHeadshotTouch(b, aNeck, aLen, bLen);
-
-                if (aHitsBNeck && bHitsANeck) return 3;
-                if (aHitsBNeck) return 1;
-                if (bHitsANeck) return 2;
-                return 0;
-            };
-
-            let playerCollPath = getCollisionPath(path, head.x, head.y, length - 3);
-            let botCollPaths = new Array(bots.length);
-            for (let i = 0; i < bots.length; i++) {
-                let b = bots[i];
-                botCollPaths[i] = getCollisionPath(b.path, b.x, b.y, b.length - 3);
-            }
-
-            for (let i = 0; i < bots.length; i++) {
-                let b = bots[i];
-
-                if (isHeadUnderEnemy(head, botCollPaths[i], b.length)) {
-                    playerIsUnder = true;
-                }
-
-                if (checkHit(head, botCollPaths[i], b.length, myR)) {
-                    triggerGameOver();
-                    return;
-                }
-
-                if (playerCollPath.length > 30 && checkHit(b, playerCollPath, length, getWormRadius(b.length))) {
-                    killBot(i);
-                    killCount++;
-                    updateStatsUI();
-                    continue;
-                }
-
-                let res = resolveHeadOn(head, b, length, b.length, playerCollPath, botCollPaths[i]);
-                if (res === 1) {
-                    killBot(i);
-                    hsCount++;
-                    updateStatsUI();
-                    continue;
-                }
-                else if (res === 2) { triggerGameOver(); return; }
-                else if (res === 3) { triggerGameOver(); return; }
-            }
-
-            if (isOnlineMode) {
-                for (const rp of Object.values(remotePlayers)) {
-                    if (!rp || !rp.path) continue;
-                    let rpLen = rp.length || 50;
-                    let rpColl = getCollisionPath(rp.path, rp.x, rp.y, rpLen - 3);
-
-                    if (isHeadUnderEnemy(head, rpColl, rpLen)) {
-                        playerIsUnder = true;
-                        break;
+                if(d < me.width) {
+                    // Yendi
+                    if (useFirebase) {
+                        // Yerel mantık
+                        applyItemEffect(it);
+                        items.splice(i, 1);
+                        if(items.length < 50) generateLocalItems(20);
+                    } else {
+                        // Sunucuya bildir
+                        ws.send(JSON.stringify({ type: 'eat', foodId: it.id }));
+                        // İstemci tarafında tahmin (latency gizleme)
+                        applyItemEffect(it);
+                        items.splice(i, 1); 
                     }
                 }
             }
-        }
 
-        function updateStatsUI() {
-            document.getElementById('kill-val').innerText = killCount;
-            document.getElementById('score-val').innerText = Math.floor(length * 10);
-        }
-
-        function killBot(index) {
-            let b = bots[index];
-            explodeWorm(b.path, b.color);
-            resetBot(b);
-        }
-
-        function updateBuffUI(id, timeId, expiry, now) {
-            let el = document.getElementById(id);
-            if (now < expiry) {
-                el.style.display = 'flex';
-                let left = Math.ceil((expiry - now) / 1000);
-                let timeEl = document.getElementById(timeId);
-                if(timeEl) timeEl.innerText = left + "s";
-            } else {
-                el.style.display = 'none';
-            }
-        }
-
-        function applyPowerup(type) {
-            let duration = 30000;
-            let now = Date.now();
-            if (type === '2x') expiries.x2 = now + duration;
-            if (type === '5x') expiries.x5 = now + duration;
-            if (type === '10x') expiries.x10 = now + duration;
-            if (type === 'ae') expiries.ae = now + duration;
-            if (type === 'spd') expiries.spd = now + duration;
-        }
-
-        function triggerGameOver() {
-            if (isGameOver) return;
-
-            isGameOver = true;
-            isGameRunning = false;
-
-            if (isOnlineMode && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'quit' }));
-                ws.close();
-            }
-
-            explodeWorm(path, playerColor);
-            
-            let score = Math.floor(length * 10);
-            showOverlay("GAME OVER", `Score: ${score}`);
-        }
-
-        function showOverlay(title, msg, isError = true) {
-            document.getElementById("game-over").style.display = "flex";
-            document.getElementById("ui-layer").style.display = "none";
-            
-            document.getElementById("overlay-title").innerText = title;
-            document.getElementById("overlay-msg").innerHTML = msg; 
-
-            let elBtnHome = document.getElementById("btn-home");
-            let elBtnPlay = document.getElementById("btn-play");
-
-            if (isError) {
-                elBtnPlay.innerText = "RETRY";
-                elBtnHome.innerText = "PLAY OFFLINE";
-            } else {
-                elBtnPlay.innerText = "PLAY AGAIN";
-                elBtnHome.innerText = "EXIT TO LOBBY";
-            }
-
-            elBtnPlay.onclick = () => { 
-                document.getElementById("game-over").style.display = "none"; 
-                if (isError) attemptConnect();
-                else restartGame();
-            };
-            elBtnHome.onclick = goHome;
-        }
-
-        /* ================= DRAWING / RENDERER ================= */
-        function isPointUnderWorm(x, y, worm) {
-            if (!worm || !worm.path) return false;
-
-            let wormR = getWormRadius(worm.length || 50);
-            let underR = wormR * UNDER_RATIO;
-            let underR2 = underR * underR;
-
-            let coll = getCollisionPath(worm.path, worm.x, worm.y, (worm.length || 50) - 3);
-            let maxK = Math.floor(coll.length * 0.7);
-
-            for (let k = 0; k < maxK; k += 3) {
-                let p = coll[k];
-                let dx = x - p.x;
-                let dy = y - p.y;
-                if (dx * dx + dy * dy < underR2) return true;
-            }
-            return false;
-        }
-
-        function draw() {
-            ctx.fillStyle = "#0b0b12";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            if (!isGameRunning) return;
-
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.scale(zoom, zoom);
-            ctx.translate(-head.x, -head.y);
-
-            let visibleW = canvas.width / zoom;
-            let visibleH = canvas.height / zoom;
-            let viewLeft = head.x - visibleW / 2 - 200;
-            let viewRight = head.x + visibleW / 2 + 200;
-            let viewTop = head.y - visibleH / 2 - 200;
-            let viewBottom = head.y + visibleH / 2 + 200;
-
-            // Draw Map Border
-            ctx.beginPath();
-            ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
-            ctx.strokeStyle = "#ff3333";
-            ctx.lineWidth = 20;
-            ctx.stroke();
-            ctx.fillStyle = "#161621";
-            ctx.fill();
-
-            // Grid
-            ctx.save();
-            ctx.clip();
-            ctx.strokeStyle = "#2a2a35";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-
-            let gridStep = 100;
-            let startX = Math.max(-MAP_RADIUS, Math.floor(viewLeft / gridStep) * gridStep);
-            let endX = Math.min(MAP_RADIUS, Math.ceil(viewRight / gridStep) * gridStep);
-            let startY = Math.max(-MAP_RADIUS, Math.floor(viewTop / gridStep) * gridStep);
-            let endY = Math.min(MAP_RADIUS, Math.ceil(viewBottom / gridStep) * gridStep);
-
-            for (let i = startX; i <= endX; i += gridStep) {
-                ctx.moveTo(i, -MAP_RADIUS); ctx.lineTo(i, MAP_RADIUS);
-            }
-            for (let i = startY; i <= endY; i += gridStep) {
-                ctx.moveTo(-MAP_RADIUS, i); ctx.lineTo(MAP_RADIUS, i);
-            }
-            ctx.stroke();
-            ctx.restore();
-
-            // Food
-            for (const f of food) {
-                if (f.x < viewLeft || f.x > viewRight || f.y < viewTop || f.y > viewBottom) continue;
-                drawFood(ctx, f);
-            }
-
-            // Powerups
-            for (const p of powerups) {
-                if (p.x < viewLeft || p.x > viewRight || p.y < viewTop || p.y > viewBottom) continue;
-                ctx.save();
-                ctx.translate(p.x, p.y);
-                let scale = 1 + Math.sin(gameTime * 2) * 0.1;
-                ctx.scale(scale, scale);
-                ctx.fillStyle = "rgba(0,0,0,0.5)";
-                ctx.beginPath();
-                ctx.arc(3, 3, p.r, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(0, 0, p.r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = "white";
-                ctx.font = "bold 10px Arial";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(p.label, 0, 0);
-                ctx.restore();
-            }
-
-            drawBots(visibleW, visibleH);
-            drawRemotePlayers(visibleW, visibleH);
-            drawPlayerBody(visibleW, visibleH);
-
-            drawMinimap();
-            ctx.restore();
-        }
-
-        function drawBots(visibleW, visibleH) {
-            bots.forEach(bot => {
-                drawGenericSnake(bot, visibleW, visibleH);
-            });
-        }
-
-        function drawRemotePlayers(visibleW, visibleH) {
-            if (isOnlineMode) {
-                Object.values(remotePlayers).forEach(p => {
-                    drawGenericSnake(p, visibleW, visibleH);
-                });
-            }
-        }
-
-        function drawGenericSnake(bot, visibleW, visibleH) {
-            if (Math.abs(bot.x - head.x) > visibleW && Math.abs(bot.y - head.y) > visibleH) return;
-
-            let dxB = bot.x - head.x;
-            let dyB = bot.y - head.y;
-            let distB = Math.hypot(dxB, dyB);
-            let maxDrawSegments = distB > 2000 ? Math.min(bot.length, 25) :
-                distB > 1200 ? Math.min(bot.length, 60) :
-                    bot.length;
-
-            let botR = getWormRadius(bot.length);
-            if (!bot.path) bot.path = [];
-
-            let pointsToDraw = getRenderedBodyPoints(bot.path, bot.x, bot.y, maxDrawSegments);
-
-            // FAKE SHADOW / GLOW LAYER
-            if (distB < 1200) {
-                ctx.fillStyle = "rgba(0,0,0,0.2)";
-                for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-                    let p = pointsToDraw[i];
-                    ctx.beginPath();
-                    ctx.arc(p.x + 3, p.y + 3, botR, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-
-            // MAIN BODY DRAW
-            for (let i = pointsToDraw.length - 1; i >= 0; i--) {
-                let p = pointsToDraw[i];
-                ctx.fillStyle = bot.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, botR, 0, Math.PI * 2);
-                ctx.fill();
-                if (distB < 1600) drawSegmentOverlay(ctx, p.x, p.y, botR);
-            }
-
-            // Head
-            ctx.fillStyle = bot.color;
-            ctx.beginPath();
-            ctx.arc(bot.x, bot.y, botR * 1.05, 0, Math.PI * 2);
-            ctx.fill();
-
-            drawWormateFace(ctx, bot.x, bot.y, bot.angle, botR);
-
-            if (distB < 900) {
-                ctx.fillStyle = "white";
-                ctx.font = "12px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText(bot.name, bot.x, bot.y - 15);
-            }
-        }
-
-        function drawPlayerBody(visibleW, visibleH) {
-            if (!isGameOver) {
-                let playerR = getWormRadius(length);
-                let underTint = playerIsUnder ? 0.92 : 1.0;
-                ctx.globalAlpha = underTint;
-
-                let pointsToDraw = getRenderedBodyPoints(path, head.x, head.y, length);
-
-                // Determine segments (Under vs Over)
-                let enemies = [...bots];
-                if (isOnlineMode) enemies.push(...Object.values(remotePlayers));
-
-                let underSegs = [];
-                let overSegs = [];
-
-                for (let i = 0; i < pointsToDraw.length; i++) {
-                    let p = pointsToDraw[i];
-                    let under = false;
-                    for (const e of enemies) {
-                        if (Math.abs(p.x - e.x) < 200 && Math.abs(p.y - e.y) < 200) {
-                            if (isPointUnderWorm(p.x, p.y, e)) {
-                                under = true;
-                                break;
-                            }
-                        }
+            // Düşman Çarpışma
+            enemies.forEach(en => {
+                if(!en.data.h) return;
+                for(let i=0; i<en.data.h.length; i+=3) {
+                    const p = en.data.h[i];
+                    if(Math.hypot(me.x - p.x, me.y - p.y) < (me.width + (en.data.w||20))/2) {
+                        die();
                     }
-                    (under ? underSegs : overSegs).push(p);
                 }
+            });
 
-                // Draw Glow/Shadow for UNDER segments
-                underSegs.forEach((p) => {
-                    ctx.fillStyle = "rgba(0,0,0,0.2)";
-                    ctx.beginPath();
-                    ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
-                    ctx.fill();
-                });
+            camera.x += (me.x - camera.x) * 0.1;
+            camera.y += (me.y - camera.y) * 0.1;
+            camera.scale = Math.max(0.5, 0.9 - (me.width - CONFIG.widthBase)/500);
+        }
 
-                // Draw UNDER Segments
-                for (let i = underSegs.length - 1; i >= 0; i--) {
-                    let p = underSegs[i];
-                    ctx.fillStyle = playerColor;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-                    ctx.fill();
-                    drawSegmentOverlay(ctx, p.x, p.y, playerR);
-                }
-
-                // Draw Glow/Shadow for OVER segments
-                overSegs.forEach((p) => {
-                    ctx.fillStyle = "rgba(0,0,0,0.2)";
-                    ctx.beginPath();
-                    ctx.arc(p.x + 3, p.y + 3, playerR, 0, Math.PI * 2);
-                    ctx.fill();
-                });
-
-                // Draw OVER Segments
-                for (let i = overSegs.length - 1; i >= 0; i--) {
-                    let p = overSegs[i];
-                    ctx.fillStyle = playerColor;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, playerR, 0, Math.PI * 2);
-                    ctx.fill();
-                    drawSegmentOverlay(ctx, p.x, p.y, playerR);
-                }
-
-                // Head
-                ctx.fillStyle = playerColor;
-                ctx.beginPath();
-                ctx.arc(head.x, head.y, playerR * 1.05, 0, Math.PI * 2);
-                ctx.fill();
-
-                drawWormateFace(ctx, head.x, head.y, head.angle, playerR);
-                ctx.globalAlpha = 1;
+        function applyItemEffect(it) {
+            const now = Date.now();
+            if(it.type === 'powerup') {
+                me.effects[it.pType] = now + (POWERUPS[it.pType].duration * 1000);
+            } else {
+                let gain = it.val || 1;
+                if(me.effects['2x']) gain *= 2;
+                if(me.effects['5x']) gain *= 5;
+                if(me.effects['10x']) gain *= 10;
+                me.score += gain;
             }
         }
 
-        function drawSegmentOverlay(ctx, x, y, r) {
-            ctx.fillStyle = "rgba(0,0,0,0.2)";
-            ctx.beginPath();
-            ctx.arc(x - r * 0.25, y, r * 0.92, 0, Math.PI * 2);
-            ctx.fill();
+        function die() {
+            me.dead = true;
+            isPlaying = false;
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('death-screen').classList.remove('hidden');
+            document.getElementById('final-score').innerText = Math.floor(me.score);
+            
+            if(useFirebase && myId) {
+                deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', myId));
+            } else if (!useFirebase && ws) {
+                ws.send(JSON.stringify({ type: 'die' }));
+            }
         }
 
-        function drawWormateFace(ctx, x, y, angle, r) {
+        // --- RENDER ---
+        function render() {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            
+            const bgX = -camera.x * camera.scale;
+            const bgY = -camera.y * camera.scale;
+            document.getElementById('game-bg').style.backgroundPosition = `${bgX}px ${bgY}px`;
+            document.getElementById('game-bg').style.backgroundSize = `${80*camera.scale}px ${80*camera.scale}px`;
+
             ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle);
-
-            let eyeX = r * 0.35;
-            let eyeY = r * 0.28;
-            let eyeR = r * 0.35;
-
-            ctx.fillStyle = "white";
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = Math.max(2, r * 0.12);
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.scale(camera.scale, camera.scale);
+            ctx.translate(-camera.x, -camera.y);
 
             ctx.beginPath();
-            ctx.arc(eyeX, -eyeY, eyeR, 0, Math.PI * 2);
-            ctx.arc(eyeX, eyeY, eyeR, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.arc(0, 0, CONFIG.mapRadius, 0, Math.PI*2);
+            ctx.lineWidth = 40;
+            ctx.strokeStyle = 'rgba(255,0,0,0.1)';
+            ctx.stroke();
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#e74c3c';
             ctx.stroke();
 
-            ctx.fillStyle = "black";
-            let pupilR = eyeR * 0.28;
-            ctx.beginPath();
-            ctx.arc(eyeX + eyeR * 0.15, -eyeY, pupilR, 0, Math.PI * 2);
-            ctx.arc(eyeX + eyeR * 0.15, eyeY, pupilR, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.strokeStyle = "#e43b3b";
-            ctx.lineWidth = Math.max(2, r * 0.14);
-            ctx.lineCap = "round";
-
-            let mouthX = r * 0.55;
-            let mouthY = 0;
-            let mouthR = r * 0.55;
-
-            ctx.beginPath();
-            ctx.arc(mouthX, mouthY, mouthR, -0.55, 0.55);
-            ctx.stroke();
-
-            ctx.restore();
-        }
-
-        function drawFood(ctx, f) {
-            ctx.save();
-            ctx.translate(f.x, f.y);
-            ctx.rotate(f.angle + gameTime * 0.1);
-            ctx.fillStyle = f.color;
-
-            ctx.strokeStyle = "rgba(0,0,0,0.25)";
-            ctx.lineWidth = Math.max(1, f.r * 0.18);
-
-            if (f.isDrops && !f.noGlow) {
+            items.forEach(it => {
+                if(Math.abs(it.x-camera.x) > canvas.width && Math.abs(it.y-camera.y) > canvas.height) return;
+                
                 ctx.save();
-                ctx.translate(3, 3);
-                ctx.fillStyle = "rgba(0,0,0,0.3)";
-                ctx.beginPath();
-                if (f.type === 0) {
-                    ctx.arc(0, 0, f.r, 0, Math.PI * 2);
-                    ctx.arc(0, 0, f.r * 0.4, 0, Math.PI * 2, true);
+                ctx.translate(it.x, it.y);
+
+                if(it.type === 'powerup') {
+                    const meta = POWERUPS[it.pType];
+                    const scale = 1 + Math.sin(Date.now()/300)*0.1;
+                    ctx.scale(scale, scale);
+                    ctx.rotate(Math.sin(Date.now()/500)*0.2);
+
+                    ctx.fillStyle = meta.color;
+                    ctx.globalAlpha = 0.3;
+                    ctx.beginPath(); ctx.arc(0,0, 25, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+
+                    ctx.fillStyle = meta.color;
+                    ctx.shadowColor = meta.color;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.moveTo(-10, -15);
+                    ctx.lineTo(10, -15);
+                    ctx.lineTo(15, 5);
+                    ctx.quadraticCurveTo(15, 20, 0, 20);
+                    ctx.quadraticCurveTo(-15, 20, -15, 5);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(meta.label.substring(0,2), 0, 5);
+
                 } else {
-                    ctx.arc(0, 0, f.r, 0, Math.PI * 2);
+                    const s = 10; 
+                    ctx.fillStyle = it.color || 'red';
+                    ctx.shadowColor = it.color || 'red';
+                    ctx.shadowBlur = 5;
+                    
+                    if(it.kind === 'donut') {
+                        ctx.beginPath(); ctx.arc(0,0,s,0,Math.PI*2); ctx.fill();
+                        ctx.globalCompositeOperation = 'destination-out';
+                        ctx.beginPath(); ctx.arc(0,0,s*0.4,0,Math.PI*2); ctx.fill();
+                        ctx.globalCompositeOperation = 'source-over';
+                    } else {
+                        ctx.beginPath(); ctx.arc(0,0,s,0,Math.PI*2); ctx.fill();
+                        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                        ctx.beginPath(); ctx.arc(-s*0.3, -s*0.3, s*0.3, 0, Math.PI*2); ctx.fill();
+                    }
                 }
-                ctx.fill();
                 ctx.restore();
-            }
+            });
 
-            if (f.type === 0) {
-                ctx.beginPath();
-                ctx.arc(0, 0, f.r, 0, Math.PI * 2);
-                ctx.arc(0, 0, f.r * 0.4, 0, Math.PI * 2, true);
-                ctx.fill();
-                ctx.stroke();
-            } else if (f.type === 1) {
-                ctx.beginPath();
-                ctx.arc(0, 0, f.r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-
-                ctx.strokeStyle = "rgba(255,255,255,0.5)";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(0, 0, f.r * 0.6, 0, Math.PI * 2);
-                ctx.stroke();
-            } else {
-                ctx.beginPath();
-                ctx.arc(0, 0, f.r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-
-                ctx.fillStyle = "rgba(0,0,0,0.3)";
-                ctx.beginPath();
-                ctx.arc(-f.r * 0.3, -f.r * 0.3, f.r * 0.2, 0, Math.PI * 2);
-                ctx.arc(f.r * 0.3, f.r * 0.2, f.r * 0.2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            ctx.globalAlpha = 0.22;
-            ctx.fillStyle = "#fff";
-            ctx.beginPath();
-            ctx.arc(-f.r * 0.25, -f.r * 0.25, f.r * 0.35, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            enemies.forEach(en => renderWorm(en.data, false));
+            renderWorm({
+                history: me.history,
+                width: me.width,
+                skinIdx: me.skinIdx,
+                name: me.name
+            }, true);
 
             ctx.restore();
+            renderMinimap();
         }
 
-        function drawMinimap() {
-            miniCtx.fillStyle = "rgba(20, 20, 30, 0.8)";
-            miniCtx.fillRect(0, 0, 150, 150);
+        function renderWorm(w, isMe) {
+            if(!w.history || w.history.length < 2) return;
+            const skin = CONFIG.skins[w.skinIdx || 0];
+            const wd = w.width || 20;
 
-            miniCtx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-            miniCtx.lineWidth = 1;
-            miniCtx.beginPath();
-            miniCtx.moveTo(0, 75); miniCtx.lineTo(150, 75);
-            miniCtx.moveTo(75, 0); miniCtx.lineTo(75, 150);
-            miniCtx.stroke();
+            const step = Math.max(1, Math.floor(wd / 8)); 
+            
+            for(let i = w.history.length-1; i >= 0; i -= step) {
+                const p = w.history[i];
+                let r = wd / 2;
+                if(i > w.history.length - 10) r *= (w.history.length-i)/10;
 
-            let scale = 150 / (MAP_RADIUS * 2);
-            let centerX = 75;
-            let centerY = 75;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+                
+                if(skin.type === 'stripe') ctx.fillStyle = (Math.floor(i/5)%2===0) ? skin.c1 : skin.c2;
+                else ctx.fillStyle = skin.c1;
+                
+                ctx.fill();
 
-            bots.forEach(bot => {
-                let mx = centerX + bot.x * scale;
-                let my = centerY + bot.y * scale;
-                miniCtx.fillStyle = bot.color;
-                miniCtx.beginPath();
-                miniCtx.arc(mx, my, 2, 0, Math.PI * 2);
-                miniCtx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r*0.7, 0, Math.PI*2);
+                ctx.fill();
+
+                if(skin.type === 'spot' && i%6===0) {
+                    ctx.fillStyle = skin.c2;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, r*0.5, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            const head = w.history[0];
+            let ang = isMe ? me.angle : 0;
+            if(!isMe && w.history[5]) ang = Math.atan2(head.y - w.history[5].y, head.x - w.history[5].x);
+
+            ctx.save();
+            ctx.translate(head.x, head.y);
+            ctx.rotate(ang);
+            
+            ctx.fillStyle = 'white';
+            ctx.shadowBlur = 0;
+            const eyOff = wd * 0.35;
+            ctx.beginPath(); ctx.arc(wd*0.2, -eyOff, wd*0.3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(wd*0.2, eyOff, wd*0.3, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            const lookX = wd*0.1;
+            ctx.beginPath(); ctx.arc(wd*0.2 + lookX, -eyOff, wd*0.12, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(wd*0.2 + lookX, eyOff, wd*0.12, 0, Math.PI*2); ctx.fill();
+
+            ctx.restore();
+
+            if(!isMe) {
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.strokeText(w.name||'', head.x, head.y - wd);
+                ctx.fillText(w.name||'', head.x, head.y - wd);
+            }
+        }
+
+        function renderMinimap() {
+            mmCtx.clearRect(0,0,140,140);
+            const scale = 140 / (CONFIG.mapRadius * 2);
+            const center = 70;
+
+            mmCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+            mmCtx.lineWidth = 1;
+            mmCtx.beginPath();
+            mmCtx.arc(center, center, CONFIG.mapRadius * scale, 0, Math.PI*2);
+            mmCtx.stroke();
+
+            mmCtx.save();
+            mmCtx.translate(center + me.x*scale, center + me.y*scale);
+            mmCtx.rotate(me.angle);
+            mmCtx.fillStyle = 'white';
+            mmCtx.beginPath(); mmCtx.moveTo(5,0); mmCtx.lineTo(-4, 4); mmCtx.lineTo(-4, -4); mmCtx.fill();
+            mmCtx.restore();
+
+            mmCtx.fillStyle = '#ff4757';
+            enemies.forEach(en => {
+                if(en.data.h && en.data.h[0]) {
+                    mmCtx.beginPath();
+                    mmCtx.arc(center + en.data.h[0].x*scale, center + en.data.h[0].y*scale, 2, 0, Math.PI*2);
+                    mmCtx.fill();
+                }
             });
+        }
 
-            if (isOnlineMode) {
-                Object.values(remotePlayers).forEach(p => {
-                    let mx = centerX + p.x * scale;
-                    let my = centerY + p.y * scale;
-                    miniCtx.fillStyle = p.color || "#fff";
-                    miniCtx.beginPath();
-                    miniCtx.arc(mx, my, 2, 0, Math.PI * 2);
-                    miniCtx.fill();
+        function updatePowerups() {
+            const container = document.getElementById('powerup-container');
+            container.innerHTML = '';
+            const now = Date.now();
+            
+            for(let [k, expiry] of Object.entries(me.effects)) {
+                const left = Math.ceil((expiry - now)/1000);
+                const meta = POWERUPS[k];
+                const div = document.createElement('div');
+                div.className = 'powerup-timer';
+                div.style.borderColor = meta.color;
+                div.innerHTML = `<i class="fas ${meta.icon} mr-2" style="color:${meta.color}"></i> ${left}s`;
+                container.appendChild(div);
+            }
+            document.getElementById('score-display').innerText = Math.floor(me.score);
+        }
+
+        // --- WEBSOCKET SYNC ---
+        function startWebSocketSync() {
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'init') {
+                    // Sunucudan gelen ID'yi kaydet
+                    me.id = data.id; 
+                    items = data.food;
+                }
+                
+                if (data.type === 'tick') {
+                    // Diğer oyuncuları güncelle
+                    data.players.forEach(p => {
+                        if (p.id !== me.id) { // Kendimizi güncelleme (Önceden p.id !== data.id hatası vardı)
+                            enemies.set(p.id, { data: p });
+                        }
+                    });
+                    
+                    // Lider Tablosu
+                    const list = data.players.map(p => ({n: p.n, s: p.s}));
+                    list.sort((a,b) => b.s - a.s);
+                    document.getElementById('leaderboard').innerHTML = list.slice(0,5).map((p,i)=>`
+                        <li class="flex justify-between border-b border-white/10 pb-1 ${p.n===me.name?'text-yellow-300':''}">
+                            <span>${i+1}. ${p.n.substring(0,10)}</span>
+                            <span>${p.s}</span>
+                        </li>`).join('');
+                }
+
+                if (data.type === 'food_eaten') {
+                    const idx = items.findIndex(i => i.id === data.id);
+                    if (idx !== -1) items.splice(idx, 1);
+                }
+
+                if (data.type === 'food_new') {
+                    items.push(data.item);
+                }
+
+                if (data.type === 'player_left') {
+                    enemies.delete(data.id);
+                }
+            };
+        }
+
+        // --- YEREL YEM ÜRETİMİ (SADECE FIREBASE MODU İÇİN) ---
+        function generateLocalItems(cnt) {
+            const kinds = ['donut', 'cake', 'candy'];
+            const pTypes = Object.keys(POWERUPS);
+            for(let i=0; i<cnt; i++) {
+                const isP = Math.random() < 0.05; 
+                const r = Math.random() * CONFIG.mapRadius;
+                const a = Math.random() * Math.PI * 2;
+                
+                if(isP) {
+                    items.push({
+                        id: Math.random(),
+                        type: 'powerup',
+                        pType: pTypes[Math.floor(Math.random()*pTypes.length)],
+                        x: Math.cos(a)*r, y: Math.sin(a)*r
+                    });
+                } else {
+                    items.push({
+                        id: Math.random(),
+                        type: 'food',
+                        kind: kinds[Math.floor(Math.random()*kinds.length)],
+                        x: Math.cos(a)*r, y: Math.sin(a)*r,
+                        color: `hsl(${Math.random()*360}, 80%, 60%)`
+                    });
+                }
+            }
+        }
+
+        // --- FIREBASE SYNC ---
+        function startFirebaseSync() {
+            const ref = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+            onSnapshot(ref, snap => {
+                const list = [];
+                snap.docChanges().forEach(c => {
+                    const d = c.doc.data();
+                    const id = c.doc.id;
+                    if(id === myId) return;
+                    if(c.type === 'removed') enemies.delete(id);
+                    else enemies.set(id, { data: d });
                 });
-            }
-
-            if (!isGameOver) {
-                let px = centerX + head.x * scale;
-                let py = centerY + head.y * scale;
-                miniCtx.fillStyle = "white";
-                miniCtx.beginPath();
-                miniCtx.arc(px, py, 3, 0, Math.PI * 2);
-                miniCtx.fill();
-                miniCtx.strokeStyle = "black";
-                miniCtx.stroke();
-            }
-        }
-
-        /* ================= UTILS ================= */
-        function lerpAngle(a, b, t) {
-            let diff = b - a;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            return a + diff * t;
-        }
-
-        function getWormRadius(len) {
-            let minR = 25;
-            let maxR = 60;
-            let base = Math.log10(Math.max(len, 50));
-            let t = Math.min(1, Math.max(0, (base - 1.7) / 4.0)); 
-            return minR + (maxR - minR) * t;
-        }
-
-        // --- FIX: UpdateLeaderboardUI with renamed variables to prevent "Assignment to constant variable" error ---
-        function updateLeaderboardUI() {
-            let lbList = [...bots];
-            
-            if (isOnlineMode) {
-                lbList = [...lbList, ...Object.values(remotePlayers)];
-            }
-
-            let elOnlineCount = document.getElementById('online-count');
-            if (elOnlineCount) {
-                let onlineCount = lbList.length + Object.keys(remotePlayers).length + (isOnlineMode && !isGameOver ? 1 : 0);
-                elOnlineCount.innerText = `(${onlineCount} online)`;
-            }
-
-            let score = Math.floor(length * 10);
-            lbList.push({ name: playerName || "You", score: score, isMe: true });
-            lbList.sort((a, b) => b.score - a.score);
-            
-            let elLbContent = document.getElementById('lb-content');
-            let html = '';
-            lbList.slice(0, 10).forEach((p, index) => {
-                let className = p.isMe ? "lb-row lb-me" : "lb-row";
-                html += `<div class="${className}"><span>#${index + 1} ${p.name}</span><span>${p.score}</span></div>`;
+                snap.forEach(d => list.push({n:d.data().n, s:d.data().s}));
+                list.push({n: me.name, s: Math.floor(me.score)});
+                list.sort((a,b)=>b.s - a.s);
+                document.getElementById('leaderboard').innerHTML = list.slice(0,5).map((p,i)=>`
+                    <li class="flex justify-between border-b border-white/10 pb-1 ${p.n===me.name?'text-yellow-300':''}">
+                        <span>${i+1}. ${p.n.substring(0,10)}</span>
+                        <span>${p.s}</span>
+                    </li>`).join('');
             });
-            elLbContent.innerHTML = html;
+            setInterval(() => {
+                if(!isPlaying || me.dead) return;
+                const sparse = me.history.filter((_,i)=>i%5===0);
+                setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', myId), {
+                    n: me.name, s: Math.floor(me.score), skinIdx: me.skinIdx,
+                    h: sparse, w: Math.floor(me.width), ts: serverTimestamp()
+                }).catch(()=>{});
+            }, 100);
         }
-
-        /* ================= MAIN LOOP ================= */
-        function loop() {
-            requestAnimationFrame(loop);
-
-            let now = performance.now();
-            let dt = (now - lastTime) / (1000 / 60);
-            lastTime = now;
-            if (dt > 10) dt = 1; 
-
-            frameCount++;
-            if (now - lastFpsUpdate >= 1000) {
-                lastFpsUpdate = now;
-                frameCount = 0;
-            }
-
-            update(dt);
-            draw();
-        }
-
-        loop();
     </script>
 </body>
 </html>
